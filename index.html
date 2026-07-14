@@ -451,46 +451,76 @@ let thunderTimer=null;
 function scheduleThunder(){if(thunderTimer)clearTimeout(thunderTimer);thunderTimer=setTimeout(()=>{const f=document.createElement('div');f.style.cssText='position:fixed;inset:0;z-index:5;background:rgba(255,255,255,0.06);pointer-events:none;transition:opacity 0.15s ease;opacity:1;';document.body.appendChild(f);setTimeout(()=>{f.style.opacity='0';},80);setTimeout(()=>{f.remove();},300);scheduleThunder();},Math.random()*8000+5000);}
 function stopThunder(){if(thunderTimer){clearTimeout(thunderTimer);thunderTimer=null;}}
 
-// ========== City Gradient Generator (replaces Wikipedia images — works offline/no network) ==========
-// Each city gets a unique, beautiful gradient based on name hash
+// ========== City Images: Wikipedia + fallback gradients ==========
+const enMap2={'北京':'Beijing','上海':'Shanghai','天津':'Tianjin','重庆':'Chongqing','广州':'Guangzhou','深圳':'Shenzhen','杭州':'Hangzhou','南京':'Nanjing','成都':'Chengdu','武汉':'Wuhan','西安':"Xi'an",'长沙':'Changsha','苏州':'Suzhou','厦门':'Xiamen','青岛':'Qingdao','大连':'Dalian','哈尔滨':'Harbin','昆明':'Kunming','拉萨':'Lhasa','乌鲁木齐':'Urumqi','香港':'Hong Kong','澳门':'Macau','台北':'Taipei','桂林':'Guilin','丽江':'Lijiang','三亚':'Sanya','张家界':'Zhangjiajie','大理':'Dali','黄山':'Huangshan','敦煌':'Dunhuang','郑州':'Zhengzhou','合肥':'Hefei','南昌':'Nanchang','济南':'Jinan','太原':'Taiyuan','沈阳':'Shenyang','长春':'Changchun','福州':'Fuzhou','贵阳':'Guiyang','兰州':'Lanzhou','西宁':'Xining','银川':'Yinchuan','南宁':'Nanning','呼和浩特':'Hohhot','海口':'Haikou','石家庄':'Shijiazhuang','宁波':'Ningbo','无锡':'Wuxi','常州':'Changzhou','扬州':'Yangzhou','绍兴':'Shaoxing','洛阳':'Luoyang','开封':'Kaifeng','珠海':'Zhuhai','东莞':'Dongguan','佛山':'Foshan','温州':'Wenzhou','徐州':'Xuzhou','烟台':'Yantai','威海':'Weihai','泉州':'Quanzhou','宜昌':'Yichang','襄阳':'Xiangyang'};
+
 function hashCity(name){let h=0;for(let i=0;i<name.length;i++)h=((h<<5)-h)+name.charCodeAt(i);return Math.abs(h);}
 
 function cityGradients(cityName){
   const h=hashCity(cityName);
   const gradients=[];
   const palettes=[
-    {a:'#667eea',b:'#764ba2',c:'#f093fb'},  // 紫粉
-    {a:'#4facfe',b:'#00f2fe',c:'#43e97b'},  // 青蓝绿
-    {a:'#fa709a',b:'#fee140',c:'#f5576c'},  // 粉橙
-    {a:'#a18cd1',b:'#fbc2eb',c:'#8fd3f4'},  // 紫粉蓝
-    {a:'#fccb90',b:'#d57eeb',c:'#e0c3fc'},  // 暖橙紫
-    {a:'#e0c3fc',b:'#8ec5fc',c:'#4facfe'},  // 紫蓝
-    {a:'#f093fb',b:'#f5576c',c:'#fee140'},  // 紫红黄
-    {a:'#43e97b',b:'#38f9d7',c:'#4facfe'},  // 绿青蓝
-    {a:'#ff9a9e',b:'#fecfef',c:'#fdfcfb'},  // 粉白
-    {a:'#ffecd2',b:'#fcb69f',c:'#ff9a9e'},  // 暖橙
+    {a:'#667eea',b:'#764ba2',c:'#f093fb'},
+    {a:'#4facfe',b:'#00f2fe',c:'#43e97b'},
+    {a:'#fa709a',b:'#fee140',c:'#f5576c'},
+    {a:'#a18cd1',b:'#fbc2eb',c:'#8fd3f4'},
+    {a:'#fccb90',b:'#d57eeb',c:'#e0c3fc'},
+    {a:'#e0c3fc',b:'#8ec5fc',c:'#4facfe'},
+    {a:'#f093fb',b:'#f5576c',c:'#fee140'},
+    {a:'#43e97b',b:'#38f9d7',c:'#4facfe'},
+    {a:'#ff9a9e',b:'#fecfef',c:'#fdfcfb'},
+    {a:'#ffecd2',b:'#fcb69f',c:'#ff9a9e'},
   ];
   const p=palettes[h%palettes.length];
-
   for(let i=0;i<5;i++){
-    const angle=((h+i*41)%360);
-    // Rotate colors for variety
-    const c=[p.a,p.b,p.c];
-    const shift=i%3;
+    const c=[p.a,p.b,p.c],shift=i%3,angle=((h+i*41)%360);
     gradients.push({
       url:'linear-gradient('+angle+'deg, '+c[(0+shift)%3]+' 0%, '+c[(1+shift)%3]+' 50%, '+c[(2+shift)%3]+' 100%)',
-      title:cityName+(i===0?'':' 视角'+(i+1)),
-      desc:cityName+' 城市风光',
-      isGradient:true
+      title:cityName+(i===0?'':' 视角'+(i+1)),desc:cityName+' 城市风光',isGradient:true
     });
   }
   return gradients;
 }
 
-// ========== City Scenic Images (now pure CSS gradients, zero network) ==========
+async function fetchWithTimeout2(url,ms){
+  const ctrl=new AbortController();
+  const id=setTimeout(()=>ctrl.abort(),ms);
+  try{const r=await fetch(url,{signal:ctrl.signal});clearTimeout(id);return r;}catch(e){clearTimeout(id);throw e;}
+}
+
 async function fetchScenicImages(cityName){
-  const gradients=cityGradients(cityName);
-  return gradients;
+  const sn=enMap2[cityName]||cityName;
+  // Try Wikipedia with 3s timeout
+  try{
+    const r=await fetchWithTimeout2('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(sn)+'?redirect=true',3000);
+    if(r.ok){
+      const d=await r.json();
+      const images=[];
+      if(d.thumbnail?.source)images.push({url:d.thumbnail.source,title:sn,desc:d.description||cityName,isGradient:false});
+      if(d.originalimage?.source)images.push({url:d.originalimage.source,title:sn,desc:d.description||cityName,isGradient:false});
+      // Also search for landmarks
+      try{
+        const r2=await fetchWithTimeout2('https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch='+encodeURIComponent(sn+' landmarks')+'&srlimit=3&format=json&origin=*',3000);
+        if(r2.ok){
+          const sd=await r2.json();
+          const titles=(sd.query?.search||[]).map(p=>p.title);
+          titles.push(sn);
+          const r3=await fetchWithTimeout2('https://en.wikipedia.org/w/api.php?action=query&titles='+encodeURIComponent([...new Set(titles)].slice(0,5).join('|'))+'&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1400&format=json&origin=*',3000);
+          if(r3.ok){
+            const pd=await r3.json();
+            for(const page of Object.values(pd.query?.pages||{})){
+              if(page.thumbnail?.source&&!images.find(i=>i.url===page.thumbnail.source)){
+                images.push({url:page.thumbnail.source.replace(/\/\d+px-/,'/1400px-'),title:page.title.replace(/_/g,' '),desc:page.description||'',isGradient:false});
+              }
+            }
+          }
+        }
+      }catch(e){}
+      if(images.length>0)return images;
+    }
+  }catch(e){}
+  // Fallback to gradients
+  return cityGradients(cityName);
 }
 
 let carouselImages=[],carouselIndex=0,carouselTimer=null,carouselPaused=false;
@@ -744,6 +774,25 @@ function geocodeLocal(query) {
   for (const item of searchIndex) {
     if (item.tokens.includes(q) || item.n.toLowerCase().startsWith(q) || item.p.toLowerCase().includes(q)) {
       results.push(item);
+    }
+  }
+  // If no results, try stripping common suffixes (市/省/区/县/州)
+  if (results.length === 0) {
+    const stripped = q.replace(/[市区县州省]$/,'');
+    if (stripped !== q && stripped.length > 1) {
+      for (const item of searchIndex) {
+        if (item.tokens.includes(stripped) || item.n.toLowerCase().startsWith(stripped) || item.p.toLowerCase().includes(stripped)) {
+          results.push(item);
+        }
+      }
+    }
+    // Also try matching just the city field (c) which holds the prefecture name
+    if (results.length === 0 && stripped.length > 1) {
+      for (const item of searchIndex) {
+        if (item.c && item.c.toLowerCase() === stripped) {
+          results.push(item);
+        }
+      }
     }
   }
   // Sort: exact name match first, then by name length (shorter=more likely)
