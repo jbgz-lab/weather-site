@@ -21,7 +21,7 @@
   .bg-carousel { position: fixed; inset: 0; z-index: 0; }
   .bg-slide { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat; opacity: 0; transition: opacity 1.8s ease; }
   .bg-slide.active { opacity: 1; }
-  .bg-slide::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,14,26,0.3) 0%, rgba(10,14,26,0.55) 40%, rgba(10,14,26,0.8) 100%); }
+  .bg-slide::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,14,26,0.2) 0%, rgba(10,14,26,0.35) 40%, rgba(10,14,26,0.65) 100%); }
   /* Carousel dots */
   .bg-carousel-dots { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; gap: 10px; }
   .bg-carousel-dots .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.3s ease; border: none; outline: none; padding: 0; }
@@ -150,12 +150,14 @@
   .search-dropdown.active { display: block; animation: slideDown 0.18s ease; }
   @keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
   .search-dropdown .item {
-    padding: 13px 20px; cursor: pointer; transition: all 0.12s ease;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
+    padding: 14px 20px; cursor: pointer; transition: all 0.12s ease;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
     display: flex; flex-direction: column; gap: 2px;
+    -webkit-tap-highlight-color: rgba(255,255,255,0.1);
+    touch-action: manipulation;
   }
   .search-dropdown .item:last-child { border-bottom: none; }
-  .search-dropdown .item:hover { background: rgba(255,255,255,0.08); }
+  .search-dropdown .item:hover, .search-dropdown .item:active { background: rgba(255,255,255,0.1); }
   .search-dropdown .item .loc-name { font-size: 15px; color: rgba(255,255,255,0.85); }
   .search-dropdown .item .loc-path { font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 1px; }
 
@@ -457,22 +459,26 @@ function cityGradients(cityName){
   const h=hashCity(cityName);
   const gradients=[];
   const palettes=[
-    {a:['#1a1a40','#2d1b69','#1a0a2e'],b:['#0f2027','#203a43','#2c5364'],c:['#1a2a6c','#b21f1f','#fdbb2d']}, // 暖紫蓝
-    {a:['#0a0a1a','#1a1040','#2a1a60'],b:['#1a0a20','#3a1050','#0a1a30'],c:['#0a1a10','#1a3a20','#0a2a1a']}, // 深紫
-    {a:['#141e30','#243b55','#0f1a2e'],b:['#0f0c29','#302b63','#24243e'],c:['#1e130c','#9a8478','#2a1a10']}, // 蓝灰
-    {a:['#2c3e50','#3498db','#1a2a38'],b:['#1a2a3a','#2c5a4a','#0a2a1a'],c:['#3a1a2a','#5a2a4a','#1a0a1a']}, // 蓝绿
-    {a:['#1a1a2e','#16213e','#0f3460'],b:['#2a1a3e','#4a2a5e','#1a0a2e'],c:['#1a2e1a','#3e5a2a','#0e1a0a']}, // 深蓝
+    {a:'#667eea',b:'#764ba2',c:'#f093fb'},  // 紫粉
+    {a:'#4facfe',b:'#00f2fe',c:'#43e97b'},  // 青蓝绿
+    {a:'#fa709a',b:'#fee140',c:'#f5576c'},  // 粉橙
+    {a:'#a18cd1',b:'#fbc2eb',c:'#8fd3f4'},  // 紫粉蓝
+    {a:'#fccb90',b:'#d57eeb',c:'#e0c3fc'},  // 暖橙紫
+    {a:'#e0c3fc',b:'#8ec5fc',c:'#4facfe'},  // 紫蓝
+    {a:'#f093fb',b:'#f5576c',c:'#fee140'},  // 紫红黄
+    {a:'#43e97b',b:'#38f9d7',c:'#4facfe'},  // 绿青蓝
+    {a:'#ff9a9e',b:'#fecfef',c:'#fdfcfb'},  // 粉白
+    {a:'#ffecd2',b:'#fcb69f',c:'#ff9a9e'},  // 暖橙
   ];
   const p=palettes[h%palettes.length];
 
   for(let i=0;i<5;i++){
-    const angle=((h+i*37)%360);
-    const p1=p[['a','b','c'][i%3]];
-    // Swap colors based on index
-    const cols=[...p1];
-    if(i%2===0)cols.reverse();
+    const angle=((h+i*41)%360);
+    // Rotate colors for variety
+    const c=[p.a,p.b,p.c];
+    const shift=i%3;
     gradients.push({
-      url:'linear-gradient('+angle+'deg, '+cols[0]+' 0%, '+cols[1]+' 50%, '+cols[2]+' 100%)',
+      url:'linear-gradient('+angle+'deg, '+c[(0+shift)%3]+' 0%, '+c[(1+shift)%3]+' 50%, '+c[(2+shift)%3]+' 100%)',
       title:cityName+(i===0?'':' 视角'+(i+1)),
       desc:cityName+' 城市风光',
       isGradient:true
@@ -1106,18 +1112,57 @@ function showLoading() {
   document.getElementById('weatherContent').innerHTML = '<div class="loader"><div class="spinner"></div><span class="loader-text">正在获取 ' + currentCity + ' 的天气…</span></div>';
 }
 function showError(msg) {
-  document.getElementById('weatherContent').innerHTML = '<div class="error-msg">⚠️ ' + msg + '<br><span style="font-size:12px;opacity:0.5;margin-top:10px;display:inline-block;">请检查网络连接后重试</span></div>';
+  document.getElementById('weatherContent').innerHTML = '<div class="error-msg" style="padding:40px 24px;">⚠️ ' + msg + '<br><span style="font-size:13px;opacity:0.55;margin:12px 0;display:block;">网络连接可能有问题</span><button onclick="retryWeather()" style="margin-top:14px;padding:10px 28px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;font-family:inherit;">🔄 点击重试</button></div>';
 }
 
 // ========== Core ==========
+let retryLat=39.9042, retryLon=116.4074, retryEntry=null;
+
+function getWeatherCache(lat,lon){
+  try{
+    const r=localStorage.getItem('wx_'+lat.toFixed(2)+'_'+lon.toFixed(2));
+    if(!r)return null;
+    const d=JSON.parse(r);
+    if(Date.now()-d.t<3600000)return d.v;
+    localStorage.removeItem('wx_'+lat.toFixed(2)+'_'+lon.toFixed(2));
+  }catch(e){}
+  return null;
+}
+function setWeatherCache(lat,lon,data){
+  try{localStorage.setItem('wx_'+lat.toFixed(2)+'_'+lon.toFixed(2),JSON.stringify({v:data,t:Date.now()}));}catch(e){}
+}
+
 async function loadWeather(lat, lon, entry) {
-  showLoading();
+  retryLat=lat;retryLon=lon;retryEntry=entry||{n:currentCity,p:currentProv,c:currentCity,displayPath:currentCity+' · '+currentProv};
+  // Try cache first
+  const cached = getWeatherCache(lat, lon);
+  if (cached) {
+    currentLat=lat;currentLon=lon;
+    currentCity=retryEntry.n;currentProv=retryEntry.p;
+    render(cached, retryEntry);
+  } else {
+    showLoading();
+  }
+  // Fetch fresh data
   try {
-    const data = await fetchWeather(lat, lon);
-    currentLat = lat; currentLon = lon;
-    currentCity = entry.n; currentProv = entry.p;
-    render(data, entry);
-  } catch (e) { showError('无法获取天气数据'); console.error(e); }
+    const data = await fetchWithTimeout(lat, lon);
+    currentLat=lat;currentLon=lon;
+    currentCity=retryEntry.n;currentProv=retryEntry.p;
+    setWeatherCache(lat,lon,data);
+    render(data, retryEntry);
+  } catch(e) {
+    console.error('Weather fetch failed:',e);
+    if(!cached)showError('无法获取天气数据');
+  }
+}
+
+function retryWeather(){loadWeather(retryLat,retryLon,retryEntry);}
+
+async function fetchWithTimeout(lat, lon){
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(()=>reject(new Error('请求超时')),15000);
+    fetchWeather(lat, lon).then(d=>{clearTimeout(timer);resolve(d);}).catch(e=>{clearTimeout(timer);reject(e);});
+  });
 }
 
 async function onSearch(query) {
@@ -1126,7 +1171,7 @@ async function onSearch(query) {
   try {
     const results = await geocode(query.trim());
     if (results.length === 0) {
-      dd.innerHTML = '<div class="item"><span class="loc-name" style="color:rgba(255,255,255,0.35);">未找到匹配位置</span></div>';
+      dd.innerHTML = '<div class="item" style="color:rgba(255,255,255,0.35);">未找到匹配位置</div>';
       dd.classList.add('active'); return;
     }
     dd.innerHTML = results.map(r =>
@@ -1136,18 +1181,20 @@ async function onSearch(query) {
       '</div>'
     ).join('');
     dd.classList.add('active');
-    dd.querySelectorAll('.item[data-lat]').forEach(el => {
-      el.addEventListener('click', () => {
-        document.getElementById('searchInput').value = el.dataset.name;
-        dd.classList.remove('active');
-        loadWeather(parseFloat(el.dataset.lat), parseFloat(el.dataset.lon), {
-          n: el.dataset.name, p: el.dataset.prov, c: el.dataset.city,
-          displayPath: el.querySelector('.loc-path').textContent
-        });
-      });
-    });
   } catch (e) { console.error(e); dd.classList.remove('active'); }
 }
+
+// Use event delegation for dropdown clicks (more reliable on mobile)
+document.getElementById('searchDropdown').addEventListener('click', function(e) {
+  const item = e.target.closest('.item[data-lat]');
+  if (!item) return;
+  document.getElementById('searchInput').value = item.dataset.name;
+  document.getElementById('searchDropdown').classList.remove('active');
+  loadWeather(parseFloat(item.dataset.lat), parseFloat(item.dataset.lon), {
+    n: item.dataset.name, p: item.dataset.prov, c: item.dataset.city,
+    displayPath: item.querySelector('.loc-path').textContent
+  });
+});
 
 // ========== Events ==========
 const si = document.getElementById('searchInput'), sd = document.getElementById('searchDropdown');
@@ -1159,7 +1206,7 @@ si.addEventListener('keydown', e => {
 });
 document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) sd.classList.remove('active'); });
 
-function startAutoRefresh() { refreshTimer = setInterval(() => { loadWeather(currentLat, currentLon, { n: currentCity, p: currentProv, c: currentCity, displayPath: currentCity + ' · ' + currentProv }); }, 5 * 60 * 1000); }
+function startAutoRefresh() { refreshTimer = setInterval(() => { loadWeather(currentLat, currentLon, retryEntry); }, 5 * 60 * 1000); }
 
 // ========== Sparkle Generator ==========
 function initSparkles(){
@@ -1179,7 +1226,8 @@ function initSparkles(){
 }
 
 async function init() {
-  await loadWeather(39.9042, 116.4074, { n: '北京', p: '北京', c: '北京', displayPath: '北京' });
+  retryEntry = { n: '北京', p: '北京', c: '北京', displayPath: '北京' };
+  await loadWeather(39.9042, 116.4074, retryEntry);
   startAutoRefresh();
   initSparkles();
 }
