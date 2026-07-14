@@ -6,6 +6,9 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<link rel="preconnect" href="https://picsum.photos" crossorigin>
+<link rel="dns-prefetch" href="https://picsum.photos">
+<link rel="dns-prefetch" href="https://api.open-meteo.com">
 <title>天气预报</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -472,14 +475,13 @@ function cityGradients(cityName){
 }
 
 function fetchScenicImages(cityName){
-  // Generate 5 seeded Picsum URLs for this city
-  // picsum.photos works globally without VPN
+  // 800x450 — plenty sharp for mobile backgrounds, loads 5x faster than 1920x1080
   const images=[];
   const seeds=['city','skyline','landmark','park','night'];
   for(let i=0;i<seeds.length;i++){
     const seed=encodeURIComponent(cityName+'-'+seeds[i]);
     images.push({
-      url:'https://picsum.photos/seed/'+seed+'/1920/1080',
+      url:'https://picsum.photos/seed/'+seed+'/800/450',
       title:cityName+(i===0?'':seeds[i]),
       desc:cityName+' · '+seeds[i],
       isGradient:false
@@ -489,6 +491,20 @@ function fetchScenicImages(cityName){
 }
 
 let carouselImages=[],carouselIndex=0,carouselTimer=null,carouselPaused=false;
+
+function buildGradientCarousel(cityName){
+  // Instant: 5 gradient slides with zero network requests
+  const h=hashCity(cityName);
+  const palettes=[{a:'#667eea',b:'#764ba2',c:'#f093fb'},{a:'#4facfe',b:'#00f2fe',c:'#43e97b'},{a:'#fa709a',b:'#fee140',c:'#f5576c'},{a:'#a18cd1',b:'#fbc2eb',c:'#8fd3f4'},{a:'#fccb90',b:'#d57eeb',c:'#e0c3fc'}];
+  const p=palettes[h%palettes.length];
+  const c=[p.a,p.b,p.c],shift=h%3,seeds=['城市','天际线','地标','公园','夜景'];
+  const images=[];
+  for(let i=0;i<5;i++){
+    const angle=((h+i*41)%360);
+    images.push({url:'linear-gradient('+angle+'deg, '+c[(0+shift+i)%3]+' 0%, '+c[(1+shift+i)%3]+' 50%, '+c[(2+shift+i)%3]+' 100%)',title:cityName+' · '+seeds[i],desc:cityName+' · '+seeds[i],isGradient:true});
+  }
+  buildCarousel(images);
+}
 
 function buildCarousel(images){
   const container=document.getElementById('bgCarousel');
@@ -1112,20 +1128,28 @@ function render(data, entry) {
     '<div class="forecast-title">📅 未来五天</div>' +
     '<div class="forecast-strip">' + forecastHTML + '</div>';
 
-  // Show city images via Picsum (works on any network worldwide)
+  // Show gradient immediately (zero network), then lazy-load real images
   const imgSearchName = isMuni ? entry.p : (entry.c || entry.n);
   updateSidePanels(imgSearchName);
 
-  // Build carousel with Picsum images immediately
-  const allImages = fetchScenicImages(imgSearchName);
-  buildCarousel(allImages);
-
-  // Hero: Picsum image with gradient fallback
+  // Step 1: Instant gradient background
   const heroGrad = cityGradients(imgSearchName);
   const heroEl = document.getElementById('cityHero');
-  if (heroEl) heroEl.style.background = 'url('+allImages[0].url+'), '+heroGrad+' center/cover';
+  if (heroEl) heroEl.style.background = heroGrad+' center/cover';
   const heroSkelEl = document.getElementById('heroSkeleton');
   if (heroSkelEl) heroSkelEl.style.display = 'none';
+  // Build gradient-only carousel instantly
+  buildGradientCarousel(imgSearchName);
+
+  // Step 2: Lazy-load real images, upgrade when ready
+  setTimeout(function(){
+    fetchScenicImages(imgSearchName).then(function(realImages){
+      if(realImages&&realImages.length>0){
+        buildCarousel(realImages);
+        if(heroEl&&realImages[0]) heroEl.style.background='url('+realImages[0].url+'), '+heroGrad+' center/cover';
+      }
+    }).catch(function(){});
+  },100);
 }
 
 function showLoading() {
