@@ -1143,17 +1143,24 @@ function render(data, entry) {
     '<div class="forecast-title">📅 未来五天</div>' +
     '<div class="forecast-strip">' + forecastHTML + '</div>';
 
-  // Generate city gradients for hero + carousel (instant, no network needed)
+  // Instant: show gradients immediately, then try Wikipedia images in background
   const imgSearchName = isMuni ? entry.p : (entry.c || entry.n);
   updateSidePanels(imgSearchName);
   const allGradients = cityGradients(imgSearchName);
   buildCarousel(allGradients);
 
-  // Set hero background to first gradient (instant)
   const heroEl = document.getElementById('cityHero');
   if (heroEl) heroEl.style.background = allGradients[0].url;
   const heroSkelEl = document.getElementById('heroSkeleton');
   if (heroSkelEl) heroSkelEl.style.display = 'none';
+
+  // Background: try to upgrade to real Wikipedia images
+  fetchScenicImages(imgSearchName).then(function(realImages){
+    if(realImages&&realImages.length>0&&!realImages[0].isGradient){
+      buildCarousel(realImages);
+      if(heroEl&&realImages[0].url)heroEl.style.background='url('+realImages[0].url+') center/cover';
+    }
+  }).catch(function(){});
 }
 
 function showLoading() {
