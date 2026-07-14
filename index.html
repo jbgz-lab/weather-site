@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天气预报</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0a0e1a; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+    transition: background 1.2s ease;
+  }
+
+  /* ========== Background Carousel ========== */
+  .bg-carousel { position: fixed; inset: 0; z-index: 0; }
+  .bg-slide { position: absolute; inset: 0; background-size: cover; background-position: center; background-repeat: no-repeat; opacity: 0; transition: opacity 1.8s ease; }
+  .bg-slide.active { opacity: 1; }
+  .bg-slide::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,14,26,0.3) 0%, rgba(10,14,26,0.55) 40%, rgba(10,14,26,0.8) 100%); }
+  /* Carousel dots */
+  .bg-carousel-dots { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; gap: 10px; }
+  .bg-carousel-dots .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.3s ease; border: none; outline: none; padding: 0; }
+  .bg-carousel-dots .dot.active { background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); transform: scale(1.2); }
+  /* Scenic label */
+  .bg-scenic-label { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 3; color: rgba(255,255,255,0.7); font-size: 13px; letter-spacing: 1px; transition: all 0.8s ease; text-align: center; max-width: 80vw; }
+
+  .weather-overlay { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: all 1.2s ease; }
+  .weather-overlay::before, .weather-overlay::after { content: ''; position: absolute; border-radius: 50%; filter: blur(120px); transition: all 1.2s ease; }
+  .weather-overlay::before { width: 900px; height: 900px; top: -25%; left: -20%; background: var(--glow-a, rgba(99,119,255,0.25)); animation: drift1 20s ease-in-out infinite; }
+  .weather-overlay::after { width: 700px; height: 700px; bottom: -20%; right: -15%; background: var(--glow-b, rgba(138,99,255,0.2)); animation: drift2 24s ease-in-out infinite; }
+  @keyframes drift1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(100px,80px) scale(1.12)} 66%{transform:translate(-50px,-30px) scale(0.93)} }
+  @keyframes drift2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-80px,-60px) scale(1.1)} 66%{transform:translate(60px,40px) scale(0.9)} }
+
+  /* ========== Aurora Gradient Bands ========== */
+  .aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5; }
+  .aurora-band {
+    position: absolute; height: 300px; width: 200%; left: -50%;
+    filter: blur(100px); mix-blend-mode: screen;
+    animation: auroraSweep var(--adur) ease-in-out infinite;
+    animation-delay: var(--adelay);
+  }
+  .aurora-band:nth-child(1) { top: 10%; background: linear-gradient(90deg, transparent 0%, rgba(130,180,255,0.2) 30%, rgba(180,130,255,0.25) 50%, rgba(100,200,180,0.15) 70%, transparent 100%); --adur: 25s; --adelay: 0s; }
+  .aurora-band:nth-child(2) { top: 35%; background: linear-gradient(90deg, transparent 0%, rgba(255,150,120,0.18) 25%, rgba(200,130,255,0.22) 50%, rgba(120,180,255,0.15) 75%, transparent 100%); --adur: 30s; --adelay: -8s; }
+  .aurora-band:nth-child(3) { top: 55%; background: linear-gradient(90deg, transparent 0%, rgba(100,200,255,0.18) 30%, rgba(180,140,220,0.2) 55%, rgba(140,220,180,0.12) 80%, transparent 100%); --adur: 28s; --adelay: -16s; }
+  @keyframes auroraSweep {
+    0%,100% { transform: translateX(-15%) rotate(-2deg); }
+    50% { transform: translateX(15%) rotate(2deg); }
+  }
+
+  /* ========== Floating Light Orbs ========== */
+  .orb { position: fixed; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(60px); opacity: 0.35; mix-blend-mode: screen; animation: orbFloat var(--odur) ease-in-out infinite; animation-delay: var(--odelay); }
+  .orb:nth-child(1) { width: 400px; height: 400px; top: 15%; left: -5%; background: radial-gradient(circle, rgba(180,200,255,0.4), transparent); --odur: 20s; --odelay: 0s; }
+  .orb:nth-child(2) { width: 300px; height: 300px; top: 55%; right: -8%; background: radial-gradient(circle, rgba(255,180,150,0.35), transparent); --odur: 24s; --odelay: -6s; }
+  .orb:nth-child(3) { width: 250px; height: 250px; bottom: 5%; left: 25%; background: radial-gradient(circle, rgba(150,220,200,0.3), transparent); --odur: 26s; --odelay: -12s; }
+  .orb:nth-child(4) { width: 350px; height: 350px; top: 30%; left: 50%; background: radial-gradient(circle, rgba(200,160,220,0.25), transparent); --odur: 22s; --odelay: -18s; }
+  @keyframes orbFloat {
+    0%,100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(60px, -40px) scale(1.15); }
+    50% { transform: translate(-30px, 30px) scale(0.9); }
+    75% { transform: translate(-50px, -20px) scale(1.08); }
+  }
+
+  /* ========== Subtle Geometric Grid ========== */
+  .geo-grid { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.04; }
+  .geo-grid::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px);
+    background-size: 100px 100px;
+    mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+  }
+
+  /* ========== Light Ray Streaks ========== */
+  .light-rays { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.25; }
+  .ray {
+    position: absolute; top: -10%; width: 1px; height: 120%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.3), transparent 60%, transparent);
+    transform-origin: top center;
+    animation: rayShimmer var(--rdur) ease-in-out infinite;
+    animation-delay: var(--rdelay);
+  }
+  .ray:nth-child(1) { left: 15%; --rdur: 12s; --rdelay: 0s; transform: rotate(15deg); }
+  .ray:nth-child(2) { left: 30%; --rdur: 14s; --rdelay: -4s; transform: rotate(22deg); width: 2px; }
+  .ray:nth-child(3) { left: 55%; --rdur: 11s; --rdelay: -7s; transform: rotate(18deg); }
+  .ray:nth-child(4) { left: 70%; --rdur: 15s; --rdelay: -10s; transform: rotate(12deg); width: 2px; }
+  .ray:nth-child(5) { left: 85%; --rdur: 13s; --rdelay: -3s; transform: rotate(25deg); }
+  @keyframes rayShimmer {
+    0%,100% { opacity: 0.1; transform: rotate(var(--r,18deg)) scaleY(0.6); }
+    50% { opacity: 0.5; transform: rotate(var(--r,18deg)) scaleY(1); }
+  }
+
+  /* ========== Floating Sparkles ========== */
+  .sparkle {
+    position: fixed; width: 2px; height: 2px; background: #fff; border-radius: 50%;
+    pointer-events: none; z-index: 0;
+    animation: sparkleFloat var(--sdur) ease-in-out infinite;
+    animation-delay: var(--sdelay); opacity: 0;
+  }
+  @keyframes sparkleFloat {
+    0%,100% { opacity: 0; transform: translate(0, 0) scale(0); }
+    10% { opacity: 1; transform: translate(10px, -20px) scale(1); }
+    30% { opacity: 0.8; transform: translate(-5px, -60px) scale(1.5); }
+    60% { opacity: 0.3; transform: translate(15px, -120px) scale(0.5); }
+    100% { opacity: 0; transform: translate(-10px, -180px) scale(0); }
+  }
+
+  #particleCanvas { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+  /* ========== Main Layout: 3-column ========== */
+  .app {
+    position: relative; z-index: 2;
+    width: 100%; max-width: 1400px; padding: 24px;
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.05); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 28px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05) inset;
+    padding: 40px 44px; transition: all 0.5s ease;
+  }
+
+  .search-wrap { position: relative; margin-bottom: 32px; }
+  .search-bar {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 14px 20px; transition: all 0.3s ease;
+  }
+  .search-bar:focus-within { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); box-shadow: 0 0 32px rgba(124,154,255,0.2); }
+  .search-bar svg { flex-shrink: 0; opacity: 0.45; width: 18px; height: 18px; }
+  .search-bar input { flex: 1; background: none; border: none; outline: none; color: #fff; font-size: 16px; font-family: inherit; min-width: 0; }
+  .search-bar input::placeholder { color: rgba(255,255,255,0.35); }
+
+  .search-dropdown {
+    position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+    background: rgba(18,20,36,0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; z-index: 10; display: none;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); max-height: 360px; overflow-y: auto;
+  }
+  .search-dropdown.active { display: block; animation: slideDown 0.18s ease; }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .search-dropdown .item {
+    padding: 13px 20px; cursor: pointer; transition: all 0.12s ease;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .search-dropdown .item:last-child { border-bottom: none; }
+  .search-dropdown .item:hover { background: rgba(255,255,255,0.08); }
+  .search-dropdown .item .loc-name { font-size: 15px; color: rgba(255,255,255,0.85); }
+  .search-dropdown .item .loc-path { font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 1px; }
+
+  .city-hero { position: relative; width: 100%; height: 200px; border-radius: 20px; overflow: hidden; margin-bottom: 32px; background: rgba(255,255,255,0.03); }
+  .city-hero img { width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease; }
+  .city-hero .hero-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 48px 24px 20px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); color: #fff; font-size: 26px; font-weight: 600; letter-spacing: 1px; }
+  .city-hero .hero-skeleton { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%); background-size: 200% 100%; animation: shimmer 2s infinite; border-radius: 20px; }
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+  .weather-main { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .weather-icon { font-size: 88px; line-height: 1; filter: drop-shadow(0 12px 32px rgba(255,200,100,0.35)); animation: float 5s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  .temp-block { text-align: right; }
+  .temp-current { font-size: 96px; font-weight: 200; line-height: 1; color: #fff; letter-spacing: -5px; }
+  .temp-unit { font-size: 28px; font-weight: 300; opacity: 0.55; vertical-align: super; }
+  .weather-desc { font-size: 18px; color: rgba(255,255,255,0.65); margin-top: 2px; }
+
+  .city-row { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+  .city-name { font-size: 22px; font-weight: 500; color: #fff; }
+  .city-sub { font-size: 13px; color: rgba(255,255,255,0.4); }
+  .update-time { font-size: 13px; color: rgba(255,255,255,0.4); margin-left: auto; }
+  .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 10px #4ade80; animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+  .sun-row { display: flex; gap: 14px; margin-bottom: 32px; }
+  .sun-card { flex: 1; display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 18px; padding: 14px 18px; }
+  .sun-card .sun-icon { font-size: 28px; }
+  .sun-card .sun-label { font-size: 11px; color: rgba(255,255,255,0.35); }
+  .sun-card .sun-time { font-size: 16px; color: #fff; font-weight: 500; }
+
+  .details-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 32px; }
+  .detail-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 18px; padding: 18px 14px; text-align: center; transition: all 0.3s ease; }
+  .detail-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); transform: translateY(-2px); }
+  .detail-item .label { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 8px; letter-spacing: 0.5px; }
+  .detail-item .value { font-size: 22px; font-weight: 500; color: #fff; }
+  .detail-item .unit { font-size: 12px; color: rgba(255,255,255,0.35); margin-left: 2px; }
+
+  .forecast-title { font-size: 13px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; }
+  .forecast-strip { display: flex; gap: 10px; }
+  .forecast-day { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.05); border-radius: 18px; padding: 18px 10px; text-align: center; transition: all 0.3s ease; }
+  .forecast-day:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); transform: translateY(-2px); }
+  .forecast-day .dow { font-size: 13px; color: rgba(255,255,255,0.4); margin-bottom: 10px; font-weight: 500; }
+  .forecast-day .d-icon { font-size: 32px; margin-bottom: 10px; }
+  .forecast-day .d-temps { font-size: 14px; color: rgba(255,255,255,0.65); }
+  .forecast-day .d-hi { color: #fff; font-weight: 600; }
+  .forecast-day .d-lo { color: rgba(255,255,255,0.35); margin-left: 5px; }
+
+  .loader { display: flex; flex-direction: column; align-items: center; padding: 80px 0; gap: 16px; }
+  .spinner { width: 44px; height: 44px; border: 2px solid rgba(255,255,255,0.08); border-top-color: rgba(124,154,255,0.7); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .loader-text { color: rgba(255,255,255,0.4); font-size: 15px; }
+  .error-msg { text-align: center; padding: 32px; color: #f87171; font-size: 15px; }
+
+  /* ========== Side Panels (Attractions / Food) ========== */
+  .side-panel {
+    background: rgba(255,255,255,0.04); backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 22px;
+    padding: 24px 20px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: all 0.5s ease;
+    animation: panelSlideL 0.6s ease;
+  }
+  .side-panel.right { animation: panelSlideR 0.6s ease; }
+  @keyframes panelSlideL { from{opacity:0;transform:translateX(-30px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes panelSlideR { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+  .side-panel::-webkit-scrollbar { width: 3px; }
+  .side-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+  .side-panel .panel-header {
+    display: flex; align-items: center; gap: 10px;
+    color: #fff; font-size: 16px; font-weight: 600;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 0; background: inherit;
+  }
+  .side-panel .panel-icon { font-size: 20px; }
+
+  .panel-item {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 13px; padding: 13px 15px;
+    transition: all 0.25s ease;
+  }
+  .panel-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
+  .panel-item .item-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+  .panel-item .item-desc { font-size: 11px; color: rgba(255,255,255,0.4); line-height: 1.5; }
+  .panel-item .item-rank { display: inline-block; font-size: 10px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.45); padding: 1px 7px; border-radius: 8px; margin-top: 4px; }
+
+  .panel-skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.02) 75%);
+    background-size: 200% 100%; animation: shimmer 2s infinite;
+    border-radius: 13px; height: 50px;
+  }
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+  .panel-loading {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  /* ========== Responsive ========== */
+  @media (max-width: 1200px) {
+    .app { grid-template-columns: 1fr; max-width: 720px; }
+    .side-panel { display: none; }
+  }
+  @media (max-width: 640px) {
+    .app { padding: 16px; } .card { padding: 24px 18px; border-radius: 22px; }
+    .city-hero { height: 140px; border-radius: 16px; margin-bottom: 20px; }
+    .city-hero .hero-label { font-size: 20px; padding: 32px 16px 14px; }
+    .temp-current { font-size: 64px; } .weather-icon { font-size: 56px; }
+    .details-grid { grid-template-columns: repeat(3,1fr); gap: 8px; }
+    .detail-item { padding: 12px 8px; border-radius: 14px; }
+    .detail-item .value { font-size: 18px; }
+    .forecast-strip { gap: 5px; } .forecast-day { padding: 12px 4px; border-radius: 14px; }
+    .forecast-day .d-icon { font-size: 24px; }
+    .sun-row { gap: 8px; } .sun-card { padding: 10px 14px; border-radius: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-carousel" id="bgCarousel"></div>
+<div class="bg-carousel-dots" id="bgCarouselDots"></div>
+<div class="bg-scenic-label" id="bgScenicLabel"></div>
+
+<!-- Ambient background layers -->
+<div class="aurora" id="aurora">
+  <div class="aurora-band"></div>
+  <div class="aurora-band"></div>
+  <div class="aurora-band"></div>
+</div>
+<div class="orb"></div><div class="orb"></div><div class="orb"></div><div class="orb"></div>
+<div class="geo-grid"></div>
+<div class="light-rays" id="lightRays">
+  <div class="ray"></div><div class="ray"></div><div class="ray"></div><div class="ray"></div><div class="ray"></div>
+</div>
+
+<div class="weather-overlay" id="weatherOverlay"></div>
+<canvas id="particleCanvas"></canvas>
+
+<main class="app">
+
+  <!-- Left: Attractions -->
+  <aside class="side-panel" id="panelAttractions">
+    <div class="panel-header"><span class="panel-icon">🏛️</span> 景点推荐</div>
+    <div class="panel-loading" id="panelAttContent">
+      <div class="panel-skeleton"></div><div class="panel-skeleton"></div><div class="panel-skeleton"></div>
+    </div>
+  </aside>
+
+  <!-- Center: Weather Card -->
+  <div class="card" id="card">
+    <div class="search-wrap">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="搜索省/市/区/县..." autocomplete="off">
+      </div>
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </div>
+    <div id="weatherContent">
+      <div class="loader"><div class="spinner"></div><span class="loader-text">获取天气数据…</span></div>
+    </div>
+  </div>
+
+  <!-- Right: Food -->
+  <aside class="side-panel right" id="panelFood">
+    <div class="panel-header"><span class="panel-icon">🍜</span> 美食推荐</div>
+    <div class="panel-loading" id="panelFoodContent">
+      <div class="panel-skeleton"></div><div class="panel-skeleton"></div><div class="panel-skeleton"></div>
+    </div>
+  </aside>
+
+</main>
+
+<script>
+// ========== Weather Category ==========
+const WCAT={SUNNY:0,PARTLY_CLOUDY:1,CLOUDY:2,OVERCAST:3,FOG:4,DRIZZLE:5,RAIN:6,SHOWER:7,SNOW:8,THUNDER:9,UNKNOWN:10};
+function classifyWMO(c){if(c===0)return WCAT.SUNNY;if(c===1||c===2)return WCAT.PARTLY_CLOUDY;if(c===3)return WCAT.OVERCAST;if(c===45||c===48)return WCAT.FOG;if(c>=51&&c<=57)return WCAT.DRIZZLE;if(c>=61&&c<=67)return WCAT.RAIN;if(c>=80&&c<=82)return WCAT.SHOWER;if([71,73,75,77,85,86].includes(c))return WCAT.SNOW;if(c>=95)return WCAT.THUNDER;return WCAT.UNKNOWN;}
+
+const themes={
+  [WCAT.SUNNY]:{glowA:'rgba(255,180,80,0.28)',glowB:'rgba(255,140,30,0.2)',auroraOpacity:0.6,orbHue:'warm',pType:null,pColor:null,pCount:0},
+  [WCAT.PARTLY_CLOUDY]:{glowA:'rgba(135,180,255,0.25)',glowB:'rgba(255,160,80,0.16)',auroraOpacity:0.5,orbHue:'warm',pType:null,pColor:null,pCount:0},
+  [WCAT.CLOUDY]:{glowA:'rgba(100,130,180,0.2)',glowB:'rgba(80,100,150,0.14)',auroraOpacity:0.3,orbHue:'neutral',pType:null,pColor:null,pCount:0},
+  [WCAT.OVERCAST]:{glowA:'rgba(80,90,110,0.15)',glowB:'rgba(60,70,90,0.1)',auroraOpacity:0.15,orbHue:'cool',pType:'fog',pColor:'rgba(180,185,195,0.06)',pCount:30},
+  [WCAT.FOG]:{glowA:'rgba(160,170,185,0.12)',glowB:'rgba(140,150,165,0.08)',auroraOpacity:0.1,orbHue:'cool',pType:'fog',pColor:'rgba(190,195,205,0.08)',pCount:50},
+  [WCAT.DRIZZLE]:{glowA:'rgba(90,110,140,0.16)',glowB:'rgba(70,90,120,0.1)',auroraOpacity:0.25,orbHue:'cool',pType:'rain',pColor:'rgba(160,180,210,0.45)',pCount:80},
+  [WCAT.RAIN]:{glowA:'rgba(60,80,120,0.14)',glowB:'rgba(50,70,100,0.1)',auroraOpacity:0.2,orbHue:'cool',pType:'rain',pColor:'rgba(140,165,200,0.55)',pCount:150},
+  [WCAT.SHOWER]:{glowA:'rgba(55,75,110,0.16)',glowB:'rgba(45,65,95,0.1)',auroraOpacity:0.18,orbHue:'cool',pType:'rain',pColor:'rgba(130,155,195,0.65)',pCount:200},
+  [WCAT.SNOW]:{glowA:'rgba(180,200,230,0.16)',glowB:'rgba(160,180,210,0.1)',auroraOpacity:0.35,orbHue:'cool',pType:'snow',pColor:'rgba(240,245,255,0.65)',pCount:100},
+  [WCAT.THUNDER]:{glowA:'rgba(100,80,180,0.2)',glowB:'rgba(140,100,60,0.15)',auroraOpacity:0.3,orbHue:'cool',pType:'rain',pColor:'rgba(160,170,200,0.5)',pCount:180},
+  [WCAT.UNKNOWN]:{glowA:'rgba(99,119,255,0.25)',glowB:'rgba(138,99,255,0.18)',auroraOpacity:0.5,orbHue:'neutral',pType:null,pColor:null,pCount:0},
+};
+
+function applyTheme(cat){
+  const t=themes[cat]||themes[WCAT.UNKNOWN];
+  document.getElementById('weatherOverlay').style.setProperty('--glow-a',t.glowA);
+  document.getElementById('weatherOverlay').style.setProperty('--glow-b',t.glowB);
+  // Aurora intensity
+  document.getElementById('aurora').style.opacity = t.auroraOpacity;
+  // Orb color tones
+  const orbs = document.querySelectorAll('.orb');
+  const orbColors = t.orbHue==='warm'
+    ? ['rgba(255,200,150,0.4)','rgba(255,160,100,0.35)','rgba(255,220,180,0.3)','rgba(255,180,130,0.25)']
+    : t.orbHue==='cool'
+    ? ['rgba(180,200,240,0.35)','rgba(160,180,220,0.3)','rgba(200,210,230,0.25)','rgba(170,190,210,0.2)']
+    : ['rgba(180,200,230,0.35)','rgba(220,180,200,0.3)','rgba(180,210,200,0.25)','rgba(200,190,210,0.2)'];
+  orbs.forEach((orb,i)=>{orb.style.background=orbColors[i];});
+
+  startParticles(t.pType,t.pColor,t.pCount);
+}
+
+// ========== Particles ==========
+let particles=[],particleType=null,particleColor=null,animId=null;
+const canvas=document.getElementById('particleCanvas'),ctx=canvas.getContext('2d');
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+
+function startParticles(type,color,count){
+  particleType=type;particleColor=color;particles=[];
+  if(!type||count===0){if(animId){cancelAnimationFrame(animId);animId=null;}ctx.clearRect(0,0,canvas.width,canvas.height);return;}
+  for(let i=0;i<count;i++)particles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:type==='snow'?Math.random()*3+1:(type==='fog'?Math.random()*80+40:Math.random()*1.5+0.5),speed:type==='snow'?Math.random()*1.5+0.3:(type==='fog'?Math.random()*0.3+0.05:Math.random()*6+4),wind:type==='snow'?Math.random()*0.8-0.4:(type==='fog'?Math.random()*0.2-0.1:Math.random()*0.6-0.3),opacity:type==='fog'?Math.random()*0.5+0.2:Math.random()*0.7+0.3});
+  if(!animId)animate();
+}
+function animate(){
+  animId=requestAnimationFrame(animate);ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(const p of particles){ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=particleColor.replace(/[\d.]+\)$/,String(p.opacity)+')');ctx.fill();p.y+=p.speed;p.x+=p.wind;if(p.y>canvas.height+20){p.y=-20;p.x=Math.random()*canvas.width;}if(p.x>canvas.width+20)p.x=-20;if(p.x<-20)p.x=canvas.width+20;}
+}
+
+// ========== Thunder ==========
+let thunderTimer=null;
+function scheduleThunder(){if(thunderTimer)clearTimeout(thunderTimer);thunderTimer=setTimeout(()=>{const f=document.createElement('div');f.style.cssText='position:fixed;inset:0;z-index:5;background:rgba(255,255,255,0.06);pointer-events:none;transition:opacity 0.15s ease;opacity:1;';document.body.appendChild(f);setTimeout(()=>{f.style.opacity='0';},80);setTimeout(()=>{f.remove();},300);scheduleThunder();},Math.random()*8000+5000);}
+function stopThunder(){if(thunderTimer){clearTimeout(thunderTimer);thunderTimer=null;}}
+
+// ========== City Scenic Image Carousel ==========
+const enMap={'北京':'Beijing','上海':'Shanghai','天津':'Tianjin','重庆':'Chongqing','广州':'Guangzhou','深圳':'Shenzhen','杭州':'Hangzhou','南京':'Nanjing','成都':'Chengdu','武汉':'Wuhan','西安':"Xi'an",'长沙':'Changsha','苏州':'Suzhou','厦门':'Xiamen','青岛':'Qingdao','大连':'Dalian','哈尔滨':'Harbin','昆明':'Kunming','拉萨':'Lhasa','乌鲁木齐':'Urumqi','香港':'Hong Kong','澳门':'Macau','台北':'Taipei','桂林':'Guilin','丽江':'Lijiang','三亚':'Sanya','张家界':'Zhangjiajie','大理':'Dali','黄山':'Huangshan','敦煌':'Dunhuang','郑州':'Zhengzhou','合肥':'Hefei','南昌':'Nanchang','济南':'Jinan','太原':'Taiyuan','沈阳':'Shenyang','长春':'Changchun','福州':'Fuzhou','贵阳':'Guiyang','兰州':'Lanzhou','西宁':'Xining','银川':'Yinchuan','南宁':'Nanning','呼和浩特':'Hohhot','海口':'Haikou','石家庄':'Shijiazhuang','宁波':'Ningbo','无锡':'Wuxi','常州':'Changzhou','扬州':'Yangzhou','绍兴':'Shaoxing','洛阳':'Luoyang','开封':'Kaifeng','岳阳':'Yueyang','遵义':'Zunyi','珠海':'Zhuhai','东莞':'Dongguan','佛山':'Foshan','温州':'Wenzhou','徐州':'Xuzhou','烟台':'Yantai','威海':'Weihai','泉州':'Quanzhou','漳州':'Zhangzhou','宜昌':'Yichang','襄阳':'Xiangyang','凤凰':'Fenghuang','九寨沟':'Jiuzhaigou','稻城':'Daocheng','喀纳斯':'Kanas','西湖':'West Lake','长城':'Great Wall','故宫':'Forbidden City','兵马俑':'Terracotta Army','黄山':'Mount Huang','泰山':'Mount Tai','华山':'Mount Hua','峨眉山':'Mount Emei','庐山':'Mount Lu','黄果树':'Huangguoshu','鼓浪屿':'Gulangyu','平遥':'Pingyao','周庄':'Zhouzhuang','乌镇':'Wuzhen','莫高窟':'Mogao Caves','布达拉宫':'Potala Palace','雅鲁藏布':'Yarlung Tsangpo','珠峰':'Mount Everest','纳木错':'Namtso','青海湖':'Qinghai Lake','茶卡':'Chaka Salt Lake','张掖丹霞':'Zhangye Danxia','元阳':'Yuanyang','龙脊':'Longji','漓江':'Li River','黄龙':'Huanglong'};
+const scenicKeywordsZH=['景区','景点','旅游','名胜','风景','古城','古镇','古建筑','寺庙','园林','湖泊','山峰','瀑布','海滩','岛屿','峡谷','草原','沙漠','雪山','冰川'];
+
+async function fetchScenicImages(cityName){
+  const sn = enMap[cityName] || cityName;
+  const images = [];
+
+  // Method 1: Fetch city main Wikipedia page image (most reliable)
+  try{
+    const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(sn) + '?redirect=true');
+    if (r.ok) {
+      const d = await r.json();
+      if (d.thumbnail?.source) images.push({url:d.thumbnail.source, title:sn, desc:d.description||cityName});
+      if (d.originalimage?.source) images.push({url:d.originalimage.source, title:sn, desc:d.description||cityName});
+    }
+  }catch(e){console.warn('WP summary fail:',e);}
+
+  // Method 2: Search Wikipedia for landmark/tourism pages and get their images
+  try{
+    const allTitles = [];
+    const searchQueries = [sn+' landmarks', sn+' tourist attractions', sn+' cityscape'];
+    for(const q of searchQueries.slice(0,2)){
+      const url = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch='+encodeURIComponent(q)+'&srlimit=4&format=json&origin=*';
+      const sr = await fetch(url);
+      if(!sr.ok) continue;
+      const sd = await sr.json();
+      if(sd.query?.search) allTitles.push(...sd.query.search.map(p=>p.title));
+    }
+    const uniqueTitles = [...new Set([sn,...allTitles])].slice(0,6);
+    const piUrl = 'https://en.wikipedia.org/w/api.php?action=query&titles='+encodeURIComponent(uniqueTitles.join('|'))+'&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1400&format=json&origin=*';
+    const piRes = await fetch(piUrl);
+    if(piRes.ok){
+      const pd = await piRes.json();
+      for(const page of Object.values(pd.query?.pages||{})){
+        if(page.thumbnail?.source){
+          const hd = page.thumbnail.source.replace(/\/\d+px-/,'/1400px-');
+          // Avoid duplicate URLs from Method 1
+          if(!images.find(i=>i.url===hd)){
+            images.push({url:hd, title:page.title.replace(/_/g,' '), desc:page.description||page.title.replace(/_/g,' ')});
+          }
+        }
+      }
+    }
+  }catch(e){console.warn('WP search fail:',e);}
+
+  // Method 3: Unsplash fallback (works globally without API key)
+  if(images.length < 3){
+    try{
+      images.push({url:'https://source.unsplash.com/1920x1080/?'+encodeURIComponent(cityName+' city'), title:cityName, desc:cityName});
+      images.push({url:'https://source.unsplash.com/1920x1080/?'+encodeURIComponent(cityName+' landmark'), title:cityName, desc:cityName});
+    }catch(e){}
+  }
+
+  return images;
+}
+
+let carouselImages=[],carouselIndex=0,carouselTimer=null,carouselPaused=false;
+
+function buildCarousel(images){
+  const container=document.getElementById('bgCarousel');
+  const dotsEl=document.getElementById('bgCarouselDots');
+  const labelEl=document.getElementById('bgScenicLabel');
+  carouselImages=images;
+  carouselIndex=0;
+  if(carouselTimer)clearInterval(carouselTimer);
+
+  if(images.length===0){
+    container.innerHTML='';dotsEl.innerHTML='';labelEl.textContent='';return;
+  }
+
+  // Build slide elements
+  container.innerHTML=images.map((img,i)=>{
+    return '<div class="bg-slide'+(i===0?' active':'')+'" style="background-image:url('+img.url+')" data-index="'+i+'"></div>';
+  }).join('');
+
+  // Build dots
+  dotsEl.innerHTML=images.length>1?images.map((img,i)=>{
+    return '<button class="dot'+(i===0?' active':'')+'" data-index="'+i+'" aria-label="'+(img.desc||img.title)+'"></button>';
+  }).join(''):'';
+
+  // Show scenic name
+  labelEl.textContent=images[0]?.desc||images[0]?.title||'';
+  labelEl.style.opacity='1';
+
+  // Bind dot clicks
+  dotsEl.querySelectorAll('.dot').forEach(d=>{
+    d.addEventListener('click',()=>{const idx=parseInt(d.dataset.index);goToSlide(idx);resetCarouselTimer();});
+  });
+
+  // Keyboard nav
+  if(images.length>1)resetCarouselTimer();
+}
+
+function goToSlide(idx){
+  if(idx===carouselIndex||idx<0||idx>=carouselImages.length)return;
+  const slides=document.querySelectorAll('.bg-slide');
+  const dots=document.querySelectorAll('.bg-carousel-dots .dot');
+  const labelEl=document.getElementById('bgScenicLabel');
+  slides[carouselIndex]?.classList.remove('active');
+  dots[carouselIndex]?.classList.remove('active');
+  carouselIndex=idx;
+  slides[carouselIndex]?.classList.add('active');
+  dots[carouselIndex]?.classList.add('active');
+  labelEl.style.opacity='0';
+  setTimeout(()=>{
+    labelEl.textContent=carouselImages[carouselIndex]?.desc||carouselImages[carouselIndex]?.title||'';
+    labelEl.style.opacity='1';
+  },400);
+}
+
+function resetCarouselTimer(){
+  if(carouselTimer)clearInterval(carouselTimer);
+  if(carouselImages.length<=1)return;
+  carouselTimer=setInterval(()=>{const next=(carouselIndex+1)%carouselImages.length;goToSlide(next);},8000);
+}
+
+function stopCarousel(){
+  if(carouselTimer){clearInterval(carouselTimer);carouselTimer=null;}
+  document.getElementById('bgCarousel').innerHTML='';
+  document.getElementById('bgCarouselDots').innerHTML='';
+  document.getElementById('bgScenicLabel').textContent='';
+  carouselImages=[];
+}
+
+function setCityBg(url){
+  // Minimal fallback — just create a single slide
+  const container=document.getElementById('bgCarousel');
+  const dotsEl=document.getElementById('bgCarouselDots');
+  stopCarousel();
+  if(url){container.innerHTML='<div class="bg-slide active" style="background-image:url('+url+')"></div>';dotsEl.innerHTML='';}else{container.innerHTML='';}
+}
+
+// ========== State ==========
+let currentLat=39.9042,currentLon=116.4074,currentCity='北京',currentProv='北京',currentDist='';
+let searchTimer=null,refreshTimer=null;
+
+// ====================================================================
+//  中国城市数据库：省 → 市 → 区/县 三级
+//  结构: {n, p(省), c(市), lat, lon}
+//  直辖市: p=c=市名, n=区名
+//  地级市: p=省, c=市, n=区/县/市名  (n===c 时代表地级市本级)
+//  省直辖县: p=省, c='', n=县名
+// ====================================================================
+const chinaAll=[
+  // ======== 北京 ========
+  {n:"东城区",p:"北京",c:"北京",lat:39.9284,lon:116.4164},{n:"西城区",p:"北京",c:"北京",lat:39.9123,lon:116.3659},{n:"朝阳区",p:"北京",c:"北京",lat:39.9219,lon:116.4435},{n:"海淀区",p:"北京",c:"北京",lat:39.9598,lon:116.2982},{n:"丰台区",p:"北京",c:"北京",lat:39.8584,lon:116.2870},{n:"石景山区",p:"北京",c:"北京",lat:39.9056,lon:116.2229},{n:"通州区",p:"北京",c:"北京",lat:39.9028,lon:116.6572},{n:"大兴区",p:"北京",c:"北京",lat:39.7268,lon:116.3381},{n:"顺义区",p:"北京",c:"北京",lat:40.1302,lon:116.6544},{n:"昌平区",p:"北京",c:"北京",lat:40.2210,lon:116.2311},{n:"房山区",p:"北京",c:"北京",lat:39.7486,lon:116.1436},{n:"门头沟区",p:"北京",c:"北京",lat:39.9403,lon:116.1017},{n:"平谷区",p:"北京",c:"北京",lat:40.1407,lon:117.1214},{n:"怀柔区",p:"北京",c:"北京",lat:40.3169,lon:116.6317},{n:"密云区",p:"北京",c:"北京",lat:40.3762,lon:116.8432},{n:"延庆区",p:"北京",c:"北京",lat:40.4569,lon:115.9745},
+
+  // ======== 上海 ========
+  {n:"黄浦区",p:"上海",c:"上海",lat:31.2316,lon:121.4693},{n:"徐汇区",p:"上海",c:"上海",lat:31.1883,lon:121.4370},{n:"长宁区",p:"上海",c:"上海",lat:31.2206,lon:121.4246},{n:"静安区",p:"上海",c:"上海",lat:31.2284,lon:121.4555},{n:"普陀区",p:"上海",c:"上海",lat:31.2496,lon:121.3969},{n:"虹口区",p:"上海",c:"上海",lat:31.2643,lon:121.4893},{n:"杨浦区",p:"上海",c:"上海",lat:31.2595,lon:121.5263},{n:"浦东新区",p:"上海",c:"上海",lat:31.2213,lon:121.5444},{n:"闵行区",p:"上海",c:"上海",lat:31.1129,lon:121.3817},{n:"宝山区",p:"上海",c:"上海",lat:31.4053,lon:121.4895},{n:"嘉定区",p:"上海",c:"上海",lat:31.3750,lon:121.2655},{n:"松江区",p:"上海",c:"上海",lat:31.0324,lon:121.2277},{n:"青浦区",p:"上海",c:"上海",lat:31.1507,lon:121.1243},{n:"奉贤区",p:"上海",c:"上海",lat:30.9183,lon:121.4740},{n:"金山区",p:"上海",c:"上海",lat:30.7420,lon:121.3420},{n:"崇明区",p:"上海",c:"上海",lat:31.6230,lon:121.3974},
+
+  // ======== 天津 ========
+  {n:"和平区",p:"天津",c:"天津",lat:39.1171,lon:117.1952},{n:"河东区",p:"天津",c:"天津",lat:39.1283,lon:117.2523},{n:"河西区",p:"天津",c:"天津",lat:39.1097,lon:117.2232},{n:"南开区",p:"天津",c:"天津",lat:39.1382,lon:117.1501},{n:"河北区",p:"天津",c:"天津",lat:39.1478,lon:117.1966},{n:"红桥区",p:"天津",c:"天津",lat:39.1673,lon:117.1516},{n:"滨海新区",p:"天津",c:"天津",lat:39.0032,lon:117.7106},{n:"东丽区",p:"天津",c:"天津",lat:39.0865,lon:117.3137},{n:"西青区",p:"天津",c:"天津",lat:39.1414,lon:117.0085},{n:"津南区",p:"天津",c:"天津",lat:38.9375,lon:117.3570},{n:"北辰区",p:"天津",c:"天津",lat:39.2242,lon:117.1355},{n:"武清区",p:"天津",c:"天津",lat:39.3841,lon:117.0441},{n:"宝坻区",p:"天津",c:"天津",lat:39.7172,lon:117.3096},{n:"静海区",p:"天津",c:"天津",lat:38.9474,lon:116.9743},{n:"宁河区",p:"天津",c:"天津",lat:39.3308,lon:117.8246},{n:"蓟州区",p:"天津",c:"天津",lat:40.0457,lon:117.4083},
+
+  // ======== 重庆 ========
+  {n:"渝中区",p:"重庆",c:"重庆",lat:29.5529,lon:106.5686},{n:"江北区",p:"重庆",c:"重庆",lat:29.6067,lon:106.5743},{n:"沙坪坝区",p:"重庆",c:"重庆",lat:29.5410,lon:106.4569},{n:"九龙坡区",p:"重庆",c:"重庆",lat:29.5020,lon:106.5115},{n:"南岸区",p:"重庆",c:"重庆",lat:29.5215,lon:106.5625},{n:"渝北区",p:"重庆",c:"重庆",lat:29.7180,lon:106.6304},{n:"巴南区",p:"重庆",c:"重庆",lat:29.4024,lon:106.5403},{n:"北碚区",p:"重庆",c:"重庆",lat:29.8053,lon:106.3962},{n:"大渡口区",p:"重庆",c:"重庆",lat:29.4840,lon:106.4823},{n:"涪陵区",p:"重庆",c:"重庆",lat:29.7031,lon:107.3901},{n:"万州区",p:"重庆",c:"重庆",lat:30.8078,lon:108.4087},{n:"黔江区",p:"重庆",c:"重庆",lat:29.5334,lon:108.7707},{n:"长寿区",p:"重庆",c:"重庆",lat:29.8578,lon:107.0813},{n:"江津区",p:"重庆",c:"重庆",lat:29.2901,lon:106.2593},{n:"合川区",p:"重庆",c:"重庆",lat:29.9721,lon:106.2762},{n:"永川区",p:"重庆",c:"重庆",lat:29.3563,lon:105.9277},{n:"南川区",p:"重庆",c:"重庆",lat:29.1577,lon:107.0991},{n:"綦江区",p:"重庆",c:"重庆",lat:29.0287,lon:106.6510},{n:"大足区",p:"重庆",c:"重庆",lat:29.7070,lon:105.7217},{n:"璧山区",p:"重庆",c:"重庆",lat:29.5925,lon:106.2272},{n:"铜梁区",p:"重庆",c:"重庆",lat:29.8449,lon:106.0563},{n:"潼南区",p:"重庆",c:"重庆",lat:30.1910,lon:105.8403},{n:"荣昌区",p:"重庆",c:"重庆",lat:29.4049,lon:105.5946},{n:"开州区",p:"重庆",c:"重庆",lat:31.1612,lon:108.3931},{n:"梁平区",p:"重庆",c:"重庆",lat:30.6739,lon:107.8020},{n:"武隆区",p:"重庆",c:"重庆",lat:29.3256,lon:107.7599},
+
+  // ======== 河北 ========
+  {n:"石家庄市",p:"河北",c:"石家庄",lat:38.0428,lon:114.5149},{n:"唐山市",p:"河北",c:"唐山",lat:39.6305,lon:118.1802},{n:"秦皇岛市",p:"河北",c:"秦皇岛",lat:39.9355,lon:119.5996},{n:"邯郸市",p:"河北",c:"邯郸",lat:36.6254,lon:114.5390},{n:"邢台市",p:"河北",c:"邢台",lat:37.0708,lon:114.5047},{n:"保定市",p:"河北",c:"保定",lat:38.8744,lon:115.4646},{n:"张家口市",p:"河北",c:"张家口",lat:40.7687,lon:114.8860},{n:"承德市",p:"河北",c:"承德",lat:40.9519,lon:117.9623},{n:"沧州市",p:"河北",c:"沧州",lat:38.3047,lon:116.8388},{n:"廊坊市",p:"河北",c:"廊坊",lat:39.5378,lon:116.6838},{n:"衡水市",p:"河北",c:"衡水",lat:37.7389,lon:115.6702},{n:"定州市",p:"河北",c:"定州",lat:38.5164,lon:114.9902},{n:"辛集市",p:"河北",c:"辛集",lat:37.9432,lon:115.2176},{n:"雄安新区",p:"河北",c:"雄安",lat:39.0513,lon:115.9722},
+  // 石家庄区县
+  {n:"长安区",p:"河北",c:"石家庄",lat:38.0366,lon:114.5394},{n:"桥西区",p:"河北",c:"石家庄",lat:38.0050,lon:114.4611},{n:"新华区",p:"河北",c:"石家庄",lat:38.0510,lon:114.4633},{n:"裕华区",p:"河北",c:"石家庄",lat:38.0060,lon:114.5315},{n:"正定县",p:"河北",c:"石家庄",lat:38.1463,lon:114.5710},
+  // 唐山区县
+  {n:"路北区",p:"河北",c:"唐山",lat:39.6250,lon:118.2008},{n:"丰润区",p:"河北",c:"唐山",lat:39.8326,lon:118.1620},{n:"曹妃甸区",p:"河北",c:"唐山",lat:39.2731,lon:118.4601},
+  // 秦皇岛区县
+  {n:"海港区",p:"河北",c:"秦皇岛",lat:39.9350,lon:119.6100},{n:"山海关区",p:"河北",c:"秦皇岛",lat:39.9789,lon:119.7758},{n:"北戴河区",p:"河北",c:"秦皇岛",lat:39.8346,lon:119.4847},
+  // 保定区县
+  {n:"竞秀区",p:"河北",c:"保定",lat:38.8776,lon:115.4586},{n:"莲池区",p:"河北",c:"保定",lat:38.8835,lon:115.4970},{n:"涿州市",p:"河北",c:"保定",lat:39.4853,lon:115.9744},
+
+  // ======== 山西 ========
+  {n:"太原市",p:"山西",c:"太原",lat:37.8706,lon:112.5489},{n:"大同市",p:"山西",c:"大同",lat:40.0764,lon:113.3001},{n:"阳泉市",p:"山西",c:"阳泉",lat:37.8567,lon:113.5805},{n:"长治市",p:"山西",c:"长治",lat:36.1953,lon:113.1165},{n:"晋城市",p:"山西",c:"晋城",lat:35.4904,lon:112.8513},{n:"朔州市",p:"山西",c:"朔州",lat:39.3316,lon:112.4329},{n:"晋中市",p:"山西",c:"晋中",lat:37.6870,lon:112.7528},{n:"运城市",p:"山西",c:"运城",lat:35.0265,lon:111.0075},{n:"忻州市",p:"山西",c:"忻州",lat:38.4167,lon:112.7342},{n:"临汾市",p:"山西",c:"临汾",lat:36.0882,lon:111.5190},{n:"吕梁市",p:"山西",c:"吕梁",lat:37.5197,lon:111.1416},
+  {n:"小店区",p:"山西",c:"太原",lat:37.7360,lon:112.5657},{n:"迎泽区",p:"山西",c:"太原",lat:37.8634,lon:112.5634},{n:"平城区",p:"山西",c:"大同",lat:40.0760,lon:113.2980},{n:"云冈区",p:"山西",c:"大同",lat:40.0053,lon:113.1497},
+
+  // ======== 内蒙古 ========
+  {n:"呼和浩特市",p:"内蒙古",c:"呼和浩特",lat:40.8424,lon:111.7490},{n:"包头市",p:"内蒙古",c:"包头",lat:40.6582,lon:109.8404},{n:"乌海市",p:"内蒙古",c:"乌海",lat:39.6538,lon:106.7955},{n:"赤峰市",p:"内蒙古",c:"赤峰",lat:42.2569,lon:118.8869},{n:"通辽市",p:"内蒙古",c:"通辽",lat:43.6525,lon:122.2437},{n:"鄂尔多斯市",p:"内蒙古",c:"鄂尔多斯",lat:39.6087,lon:109.7813},{n:"呼伦贝尔市",p:"内蒙古",c:"呼伦贝尔",lat:49.2116,lon:119.7658},{n:"巴彦淖尔市",p:"内蒙古",c:"巴彦淖尔",lat:40.7431,lon:107.3879},{n:"乌兰察布市",p:"内蒙古",c:"乌兰察布",lat:40.9945,lon:113.1338},{n:"兴安盟",p:"内蒙古",c:"兴安盟",lat:46.0820,lon:122.0382},{n:"锡林郭勒盟",p:"内蒙古",c:"锡林郭勒",lat:43.9441,lon:116.0273},{n:"阿拉善盟",p:"内蒙古",c:"阿拉善",lat:38.8514,lon:105.7289},
+  {n:"新城区",p:"内蒙古",c:"呼和浩特",lat:40.8586,lon:111.6655},{n:"回民区",p:"内蒙古",c:"呼和浩特",lat:40.8086,lon:111.6240},{n:"赛罕区",p:"内蒙古",c:"呼和浩特",lat:40.7924,lon:111.7017},{n:"昆都仑区",p:"内蒙古",c:"包头",lat:40.6424,lon:109.8389},{n:"青山区",p:"内蒙古",c:"包头",lat:40.6455,lon:109.9019},
+
+  // ======== 辽宁 ========
+  {n:"沈阳市",p:"辽宁",c:"沈阳",lat:41.8057,lon:123.4315},{n:"大连市",p:"辽宁",c:"大连",lat:38.9140,lon:121.6147},{n:"鞍山市",p:"辽宁",c:"鞍山",lat:41.1077,lon:122.9943},{n:"抚顺市",p:"辽宁",c:"抚顺",lat:41.8810,lon:123.9567},{n:"本溪市",p:"辽宁",c:"本溪",lat:41.2937,lon:123.7665},{n:"丹东市",p:"辽宁",c:"丹东",lat:40.0005,lon:124.3547},{n:"锦州市",p:"辽宁",c:"锦州",lat:41.0958,lon:121.1270},{n:"营口市",p:"辽宁",c:"营口",lat:40.6668,lon:122.2349},{n:"阜新市",p:"辽宁",c:"阜新",lat:42.0216,lon:121.6706},{n:"辽阳市",p:"辽宁",c:"辽阳",lat:41.2680,lon:123.2369},{n:"盘锦市",p:"辽宁",c:"盘锦",lat:41.1180,lon:122.0707},{n:"铁岭市",p:"辽宁",c:"铁岭",lat:42.2238,lon:123.7262},{n:"朝阳市",p:"辽宁",c:"朝阳",lat:41.5734,lon:120.4508},{n:"葫芦岛市",p:"辽宁",c:"葫芦岛",lat:40.7110,lon:120.8368},
+  {n:"和平区",p:"辽宁",c:"沈阳",lat:41.7898,lon:123.4205},{n:"沈河区",p:"辽宁",c:"沈阳",lat:41.7959,lon:123.4585},{n:"铁西区",p:"辽宁",c:"沈阳",lat:41.8024,lon:123.3764},{n:"中山区",p:"辽宁",c:"大连",lat:38.9183,lon:121.6451},{n:"西岗区",p:"辽宁",c:"大连",lat:38.9145,lon:121.6123},{n:"沙河口区",p:"辽宁",c:"大连",lat:38.9048,lon:121.5946},{n:"甘井子区",p:"辽宁",c:"大连",lat:38.9522,lon:121.5254},{n:"旅顺口区",p:"辽宁",c:"大连",lat:38.8515,lon:121.2620},{n:"金州区",p:"辽宁",c:"大连",lat:39.1002,lon:121.7827},
+
+  // ======== 吉林 ========
+  {n:"长春市",p:"吉林",c:"长春",lat:43.8171,lon:125.3235},{n:"吉林市",p:"吉林",c:"吉林",lat:43.8378,lon:126.5495},{n:"四平市",p:"吉林",c:"四平",lat:43.1665,lon:124.3504},{n:"辽源市",p:"吉林",c:"辽源",lat:42.8882,lon:125.1412},{n:"通化市",p:"吉林",c:"通化",lat:41.7289,lon:125.9399},{n:"白山市",p:"吉林",c:"白山",lat:41.9405,lon:126.4199},{n:"松原市",p:"吉林",c:"松原",lat:45.1411,lon:124.8253},{n:"白城市",p:"吉林",c:"白城",lat:45.6192,lon:122.8371},{n:"延边朝鲜族自治州",p:"吉林",c:"延边",lat:42.9096,lon:129.5134},
+  {n:"南关区",p:"吉林",c:"长春",lat:43.8640,lon:125.3504},{n:"朝阳区",p:"吉林",c:"长春",lat:43.8335,lon:125.2883},{n:"延吉市",p:"吉林",c:"延边",lat:42.9096,lon:129.5134},
+
+  // ======== 黑龙江 ========
+  {n:"哈尔滨市",p:"黑龙江",c:"哈尔滨",lat:45.8038,lon:126.5350},{n:"齐齐哈尔市",p:"黑龙江",c:"齐齐哈尔",lat:47.3543,lon:123.9182},{n:"牡丹江市",p:"黑龙江",c:"牡丹江",lat:44.5830,lon:129.6130},{n:"佳木斯市",p:"黑龙江",c:"佳木斯",lat:46.7998,lon:130.3183},{n:"大庆市",p:"黑龙江",c:"大庆",lat:46.5907,lon:125.1035},{n:"绥化市",p:"黑龙江",c:"绥化",lat:46.6526,lon:126.9847},{n:"黑河市",p:"黑龙江",c:"黑河",lat:50.2459,lon:127.4869},{n:"伊春市",p:"黑龙江",c:"伊春",lat:47.7275,lon:128.8401},{n:"鹤岗市",p:"黑龙江",c:"鹤岗",lat:47.3499,lon:130.2982},{n:"双鸭山市",p:"黑龙江",c:"双鸭山",lat:46.6469,lon:131.1591},{n:"七台河市",p:"黑龙江",c:"七台河",lat:45.7709,lon:131.0021},{n:"鸡西市",p:"黑龙江",c:"鸡西",lat:45.2953,lon:130.9693},{n:"大兴安岭地区",p:"黑龙江",c:"大兴安岭",lat:50.4227,lon:124.1277},
+  {n:"道里区",p:"黑龙江",c:"哈尔滨",lat:45.7557,lon:126.6173},{n:"南岗区",p:"黑龙江",c:"哈尔滨",lat:45.7599,lon:126.6687},{n:"松北区",p:"黑龙江",c:"哈尔滨",lat:45.8084,lon:126.5627},{n:"萨尔图区",p:"黑龙江",c:"大庆",lat:46.5876,lon:125.1149},
+
+  // ======== 江苏 ========
+  {n:"南京市",p:"江苏",c:"南京",lat:32.0603,lon:118.7969},{n:"无锡市",p:"江苏",c:"无锡",lat:31.4912,lon:120.3119},{n:"徐州市",p:"江苏",c:"徐州",lat:34.2058,lon:117.2841},{n:"常州市",p:"江苏",c:"常州",lat:31.8108,lon:119.9740},{n:"苏州市",p:"江苏",c:"苏州",lat:31.2990,lon:120.5853},{n:"南通市",p:"江苏",c:"南通",lat:31.9796,lon:120.8937},{n:"连云港市",p:"江苏",c:"连云港",lat:34.5967,lon:119.2229},{n:"淮安市",p:"江苏",c:"淮安",lat:33.5510,lon:119.1132},{n:"盐城市",p:"江苏",c:"盐城",lat:33.3493,lon:120.1616},{n:"扬州市",p:"江苏",c:"扬州",lat:32.3936,lon:119.4128},{n:"镇江市",p:"江苏",c:"镇江",lat:32.1893,lon:119.4119},{n:"泰州市",p:"江苏",c:"泰州",lat:32.4555,lon:119.9255},{n:"宿迁市",p:"江苏",c:"宿迁",lat:33.9619,lon:118.2755},
+  {n:"玄武区",p:"江苏",c:"南京",lat:32.0487,lon:118.7978},{n:"鼓楼区",p:"江苏",c:"南京",lat:32.0663,lon:118.7700},{n:"秦淮区",p:"江苏",c:"南京",lat:32.0392,lon:118.7947},{n:"建邺区",p:"江苏",c:"南京",lat:32.0033,lon:118.7316},{n:"江宁区",p:"江苏",c:"南京",lat:31.9526,lon:118.8400},{n:"姑苏区",p:"江苏",c:"苏州",lat:31.3110,lon:120.6170},{n:"虎丘区",p:"江苏",c:"苏州",lat:31.2950,lon:120.5720},{n:"吴中区",p:"江苏",c:"苏州",lat:31.2646,lon:120.6234},{n:"昆山市",p:"江苏",c:"苏州",lat:31.3849,lon:120.9817},{n:"梁溪区",p:"江苏",c:"无锡",lat:31.5660,lon:120.3031},{n:"新吴区",p:"江苏",c:"无锡",lat:31.5508,lon:120.3641},{n:"江阴市",p:"江苏",c:"无锡",lat:31.9207,lon:120.2850},{n:"天宁区",p:"江苏",c:"常州",lat:31.7790,lon:119.9747},{n:"广陵区",p:"江苏",c:"扬州",lat:32.3945,lon:119.4316},
+
+  // ======== 浙江 ========
+  {n:"杭州市",p:"浙江",c:"杭州",lat:30.2741,lon:120.1551},{n:"宁波市",p:"浙江",c:"宁波",lat:29.8683,lon:121.5440},{n:"温州市",p:"浙江",c:"温州",lat:27.9939,lon:120.6994},{n:"嘉兴市",p:"浙江",c:"嘉兴",lat:30.7706,lon:120.7555},{n:"湖州市",p:"浙江",c:"湖州",lat:30.8931,lon:120.0880},{n:"绍兴市",p:"浙江",c:"绍兴",lat:30.0303,lon:120.5802},{n:"金华市",p:"浙江",c:"金华",lat:29.0781,lon:119.6472},{n:"衢州市",p:"浙江",c:"衢州",lat:28.9702,lon:118.8729},{n:"舟山市",p:"浙江",c:"舟山",lat:30.0160,lon:122.1067},{n:"台州市",p:"浙江",c:"台州",lat:28.6564,lon:121.4208},{n:"丽水市",p:"浙江",c:"丽水",lat:28.4676,lon:119.9228},
+  {n:"上城区",p:"浙江",c:"杭州",lat:30.2427,lon:120.1693},{n:"拱墅区",p:"浙江",c:"杭州",lat:30.3192,lon:120.1415},{n:"西湖区",p:"浙江",c:"杭州",lat:30.2593,lon:120.1302},{n:"滨江区",p:"浙江",c:"杭州",lat:30.2080,lon:120.2119},{n:"萧山区",p:"浙江",c:"杭州",lat:30.1838,lon:120.2644},{n:"余杭区",p:"浙江",c:"杭州",lat:30.4189,lon:120.2992},{n:"海曙区",p:"浙江",c:"宁波",lat:29.8597,lon:121.5508},{n:"鄞州区",p:"浙江",c:"宁波",lat:29.8172,lon:121.5475},{n:"鹿城区",p:"浙江",c:"温州",lat:28.0150,lon:120.6552},{n:"义乌市",p:"浙江",c:"金华",lat:29.3068,lon:120.0750},{n:"慈溪市",p:"浙江",c:"宁波",lat:30.1697,lon:121.2665},
+
+  // ======== 安徽 ========
+  {n:"合肥市",p:"安徽",c:"合肥",lat:31.8206,lon:117.2272},{n:"芜湖市",p:"安徽",c:"芜湖",lat:31.3526,lon:118.4326},{n:"蚌埠市",p:"安徽",c:"蚌埠",lat:32.9163,lon:117.3893},{n:"淮南市",p:"安徽",c:"淮南",lat:32.6255,lon:116.9998},{n:"马鞍山市",p:"安徽",c:"马鞍山",lat:31.6705,lon:118.5061},{n:"淮北市",p:"安徽",c:"淮北",lat:33.9562,lon:116.7984},{n:"铜陵市",p:"安徽",c:"铜陵",lat:30.9448,lon:117.8116},{n:"安庆市",p:"安徽",c:"安庆",lat:30.5429,lon:117.0630},{n:"黄山市",p:"安徽",c:"黄山",lat:29.7151,lon:118.3387},{n:"滁州市",p:"安徽",c:"滁州",lat:32.3018,lon:118.3170},{n:"阜阳市",p:"安徽",c:"阜阳",lat:32.8896,lon:115.8145},{n:"宿州市",p:"安徽",c:"宿州",lat:33.6478,lon:116.9642},{n:"六安市",p:"安徽",c:"六安",lat:31.7349,lon:116.5219},{n:"亳州市",p:"安徽",c:"亳州",lat:33.8446,lon:115.7790},{n:"池州市",p:"安徽",c:"池州",lat:30.6647,lon:117.4914},{n:"宣城市",p:"安徽",c:"宣城",lat:30.9407,lon:118.7587},
+  {n:"庐阳区",p:"安徽",c:"合肥",lat:31.8787,lon:117.2648},{n:"包河区",p:"安徽",c:"合肥",lat:31.7931,lon:117.3096},{n:"蜀山区",p:"安徽",c:"合肥",lat:31.8512,lon:117.2605},{n:"镜湖区",p:"安徽",c:"芜湖",lat:31.3404,lon:118.3851},{n:"屯溪区",p:"安徽",c:"黄山",lat:29.6961,lon:118.3154},
+
+  // ======== 福建 ========
+  {n:"福州市",p:"福建",c:"福州",lat:26.0745,lon:119.2965},{n:"厦门市",p:"福建",c:"厦门",lat:24.4798,lon:118.0894},{n:"莆田市",p:"福建",c:"莆田",lat:25.4539,lon:119.0076},{n:"三明市",p:"福建",c:"三明",lat:26.2639,lon:117.6387},{n:"泉州市",p:"福建",c:"泉州",lat:24.8741,lon:118.6759},{n:"漳州市",p:"福建",c:"漳州",lat:24.5130,lon:117.6471},{n:"南平市",p:"福建",c:"南平",lat:26.6417,lon:118.1777},{n:"龙岩市",p:"福建",c:"龙岩",lat:25.0756,lon:117.0173},{n:"宁德市",p:"福建",c:"宁德",lat:26.6657,lon:119.5481},
+  {n:"鼓楼区",p:"福建",c:"福州",lat:26.0822,lon:119.3034},{n:"台江区",p:"福建",c:"福州",lat:26.0526,lon:119.3141},{n:"仓山区",p:"福建",c:"福州",lat:26.0466,lon:119.2735},{n:"思明区",p:"福建",c:"厦门",lat:24.4459,lon:118.0829},{n:"湖里区",p:"福建",c:"厦门",lat:24.5078,lon:118.1468},{n:"集美区",p:"福建",c:"厦门",lat:24.5759,lon:118.0973},{n:"鲤城区",p:"福建",c:"泉州",lat:24.9075,lon:118.5869},{n:"晋江市",p:"福建",c:"泉州",lat:24.7817,lon:118.5518},{n:"石狮市",p:"福建",c:"泉州",lat:24.7318,lon:118.6479},
+
+  // ======== 江西 ========
+  {n:"南昌市",p:"江西",c:"南昌",lat:28.6820,lon:115.8582},{n:"景德镇市",p:"江西",c:"景德镇",lat:29.2687,lon:117.1784},{n:"萍乡市",p:"江西",c:"萍乡",lat:27.6229,lon:113.8546},{n:"九江市",p:"江西",c:"九江",lat:29.7051,lon:116.0019},{n:"新余市",p:"江西",c:"新余",lat:27.8178,lon:114.9173},{n:"鹰潭市",p:"江西",c:"鹰潭",lat:28.2601,lon:117.0692},{n:"赣州市",p:"江西",c:"赣州",lat:25.8309,lon:114.9350},{n:"吉安市",p:"江西",c:"吉安",lat:27.1138,lon:114.9929},{n:"宜春市",p:"江西",c:"宜春",lat:27.8141,lon:114.4167},{n:"抚州市",p:"江西",c:"抚州",lat:27.9490,lon:116.3581},{n:"上饶市",p:"江西",c:"上饶",lat:28.4547,lon:117.9430},
+  {n:"东湖区",p:"江西",c:"南昌",lat:28.6851,lon:115.8991},{n:"西湖区",p:"江西",c:"南昌",lat:28.6569,lon:115.8772},{n:"青山湖区",p:"江西",c:"南昌",lat:28.6821,lon:115.9623},{n:"浔阳区",p:"江西",c:"九江",lat:29.7268,lon:115.9904},{n:"庐山市",p:"江西",c:"九江",lat:29.4481,lon:116.0451},
+
+  // ======== 山东 ========
+  {n:"济南市",p:"山东",c:"济南",lat:36.6512,lon:116.9972},{n:"青岛市",p:"山东",c:"青岛",lat:36.0671,lon:120.3826},{n:"淄博市",p:"山东",c:"淄博",lat:36.8135,lon:118.0550},{n:"枣庄市",p:"山东",c:"枣庄",lat:34.8105,lon:117.3237},{n:"东营市",p:"山东",c:"东营",lat:37.4337,lon:118.6747},{n:"烟台市",p:"山东",c:"烟台",lat:37.4638,lon:121.4479},{n:"潍坊市",p:"山东",c:"潍坊",lat:36.7069,lon:119.1618},{n:"济宁市",p:"山东",c:"济宁",lat:35.4146,lon:116.5872},{n:"泰安市",p:"山东",c:"泰安",lat:36.2000,lon:117.0876},{n:"威海市",p:"山东",c:"威海",lat:37.5131,lon:122.1206},{n:"日照市",p:"山东",c:"日照",lat:35.4164,lon:119.5269},{n:"临沂市",p:"山东",c:"临沂",lat:35.1047,lon:118.3564},{n:"德州市",p:"山东",c:"德州",lat:37.4340,lon:116.3594},{n:"聊城市",p:"山东",c:"聊城",lat:36.4560,lon:115.9854},{n:"滨州市",p:"山东",c:"滨州",lat:37.3819,lon:117.9719},{n:"菏泽市",p:"山东",c:"菏泽",lat:35.2335,lon:115.4807},
+  {n:"历下区",p:"山东",c:"济南",lat:36.6664,lon:117.0764},{n:"市中区",p:"山东",c:"济南",lat:36.6511,lon:116.9976},{n:"市南区",p:"山东",c:"青岛",lat:36.0753,lon:120.4122},{n:"崂山区",p:"山东",c:"青岛",lat:36.1073,lon:120.4690},{n:"黄岛区",p:"山东",c:"青岛",lat:35.9607,lon:120.1978},{n:"芝罘区",p:"山东",c:"烟台",lat:37.5414,lon:121.4002},{n:"蓬莱区",p:"山东",c:"烟台",lat:37.8113,lon:120.7588},{n:"环翠区",p:"山东",c:"威海",lat:37.5028,lon:122.1234},{n:"张店区",p:"山东",c:"淄博",lat:36.8067,lon:118.0180},{n:"曲阜市",p:"山东",c:"济宁",lat:35.5808,lon:116.9865},
+
+  // ======== 河南 ========
+  {n:"郑州市",p:"河南",c:"郑州",lat:34.7466,lon:113.6254},{n:"开封市",p:"河南",c:"开封",lat:34.7975,lon:114.3076},{n:"洛阳市",p:"河南",c:"洛阳",lat:34.6181,lon:112.4540},{n:"平顶山市",p:"河南",c:"平顶山",lat:33.7662,lon:113.1924},{n:"安阳市",p:"河南",c:"安阳",lat:36.0998,lon:114.3931},{n:"鹤壁市",p:"河南",c:"鹤壁",lat:35.7470,lon:114.2974},{n:"新乡市",p:"河南",c:"新乡",lat:35.3030,lon:113.9267},{n:"焦作市",p:"河南",c:"焦作",lat:35.2159,lon:113.2420},{n:"濮阳市",p:"河南",c:"濮阳",lat:35.7619,lon:115.0293},{n:"许昌市",p:"河南",c:"许昌",lat:34.0358,lon:113.8523},{n:"漯河市",p:"河南",c:"漯河",lat:33.5814,lon:114.0165},{n:"三门峡市",p:"河南",c:"三门峡",lat:34.7726,lon:111.2002},{n:"南阳市",p:"河南",c:"南阳",lat:32.9907,lon:112.5285},{n:"商丘市",p:"河南",c:"商丘",lat:34.4140,lon:115.6564},{n:"信阳市",p:"河南",c:"信阳",lat:32.1473,lon:114.0928},{n:"周口市",p:"河南",c:"周口",lat:33.6262,lon:114.6968},{n:"驻马店市",p:"河南",c:"驻马店",lat:33.0114,lon:114.0223},{n:"济源市",p:"河南",c:"济源",lat:35.0670,lon:112.6023},
+  {n:"中原区",p:"河南",c:"郑州",lat:34.7482,lon:113.6130},{n:"二七区",p:"河南",c:"郑州",lat:34.7240,lon:113.6403},{n:"金水区",p:"河南",c:"郑州",lat:34.8004,lon:113.6607},{n:"郑东新区",p:"河南",c:"郑州",lat:34.7684,lon:113.7289},{n:"洛龙区",p:"河南",c:"洛阳",lat:34.6194,lon:112.4640},{n:"龙亭区",p:"河南",c:"开封",lat:34.8157,lon:114.3548},{n:"卧龙区",p:"河南",c:"南阳",lat:32.9864,lon:112.5348},
+
+  // ======== 湖北 ========
+  {n:"武汉市",p:"湖北",c:"武汉",lat:30.5928,lon:114.3055},{n:"黄石市",p:"湖北",c:"黄石",lat:30.2000,lon:115.0388},{n:"十堰市",p:"湖北",c:"十堰",lat:32.6295,lon:110.7979},{n:"宜昌市",p:"湖北",c:"宜昌",lat:30.6919,lon:111.2864},{n:"襄阳市",p:"湖北",c:"襄阳",lat:32.0090,lon:112.1226},{n:"鄂州市",p:"湖北",c:"鄂州",lat:30.3906,lon:114.8948},{n:"荆门市",p:"湖北",c:"荆门",lat:31.0355,lon:112.1997},{n:"孝感市",p:"湖北",c:"孝感",lat:30.9248,lon:113.9169},{n:"荆州市",p:"湖北",c:"荆州",lat:30.3352,lon:112.2407},{n:"黄冈市",p:"湖北",c:"黄冈",lat:30.4537,lon:114.8724},{n:"咸宁市",p:"湖北",c:"咸宁",lat:29.8414,lon:114.3225},{n:"随州市",p:"湖北",c:"随州",lat:31.6900,lon:113.3826},{n:"恩施土家族苗族自治州",p:"湖北",c:"恩施",lat:30.2950,lon:109.4792},{n:"仙桃市",p:"湖北",c:"仙桃",lat:30.3650,lon:113.4533},{n:"潜江市",p:"湖北",c:"潜江",lat:30.4014,lon:112.8999},{n:"天门市",p:"湖北",c:"天门",lat:30.6638,lon:113.1661},
+  {n:"武昌区",p:"湖北",c:"武汉",lat:30.5539,lon:114.3160},{n:"江岸区",p:"湖北",c:"武汉",lat:30.5998,lon:114.3093},{n:"江汉区",p:"湖北",c:"武汉",lat:30.6013,lon:114.2708},{n:"洪山区",p:"湖北",c:"武汉",lat:30.5000,lon:114.3426},{n:"汉阳区",p:"湖北",c:"武汉",lat:30.5547,lon:114.2186},{n:"东湖高新区",p:"湖北",c:"武汉",lat:30.5066,lon:114.4122},{n:"西陵区",p:"湖北",c:"宜昌",lat:30.7110,lon:111.2860},{n:"襄城区",p:"湖北",c:"襄阳",lat:32.0102,lon:112.1338},
+
+  // ======== 湖南 ========
+  {n:"长沙市",p:"湖南",c:"长沙",lat:28.2282,lon:112.9388},{n:"株洲市",p:"湖南",c:"株洲",lat:27.8279,lon:113.1340},{n:"湘潭市",p:"湖南",c:"湘潭",lat:27.8298,lon:112.9440},{n:"衡阳市",p:"湖南",c:"衡阳",lat:26.8932,lon:112.5719},{n:"邵阳市",p:"湖南",c:"邵阳",lat:27.2386,lon:111.4677},{n:"岳阳市",p:"湖南",c:"岳阳",lat:29.3566,lon:113.1289},{n:"常德市",p:"湖南",c:"常德",lat:29.0317,lon:111.6985},{n:"张家界市",p:"湖南",c:"张家界",lat:29.1170,lon:110.4783},{n:"益阳市",p:"湖南",c:"益阳",lat:28.5543,lon:112.3551},{n:"郴州市",p:"湖南",c:"郴州",lat:25.7711,lon:113.0148},{n:"永州市",p:"湖南",c:"永州",lat:26.4202,lon:111.6133},{n:"怀化市",p:"湖南",c:"怀化",lat:27.5693,lon:109.9993},{n:"娄底市",p:"湖南",c:"娄底",lat:27.6971,lon:111.9946},{n:"湘西土家族苗族自治州",p:"湖南",c:"湘西",lat:28.3117,lon:109.7393},
+  {n:"芙蓉区",p:"湖南",c:"长沙",lat:28.1855,lon:113.0328},{n:"天心区",p:"湖南",c:"长沙",lat:28.1145,lon:112.9900},{n:"岳麓区",p:"湖南",c:"长沙",lat:28.2343,lon:112.9312},{n:"开福区",p:"湖南",c:"长沙",lat:28.2561,lon:112.9860},{n:"雨花区",p:"湖南",c:"长沙",lat:28.1355,lon:113.0386},{n:"武陵源区",p:"湖南",c:"张家界",lat:29.3457,lon:110.5504},{n:"凤凰县",p:"湖南",c:"湘西",lat:27.9484,lon:109.5989},
+
+  // ======== 广东 ========
+  {n:"广州市",p:"广东",c:"广州",lat:23.1291,lon:113.2644},{n:"深圳市",p:"广东",c:"深圳",lat:22.5431,lon:114.0579},{n:"珠海市",p:"广东",c:"珠海",lat:22.2707,lon:113.5767},{n:"汕头市",p:"广东",c:"汕头",lat:23.3541,lon:116.6820},{n:"佛山市",p:"广东",c:"佛山",lat:23.0218,lon:113.1214},{n:"韶关市",p:"广东",c:"韶关",lat:24.8104,lon:113.5976},{n:"河源市",p:"广东",c:"河源",lat:23.7436,lon:114.7004},{n:"梅州市",p:"广东",c:"梅州",lat:24.2884,lon:116.1227},{n:"惠州市",p:"广东",c:"惠州",lat:23.1118,lon:114.4168},{n:"汕尾市",p:"广东",c:"汕尾",lat:22.7868,lon:115.3758},{n:"东莞市",p:"广东",c:"东莞",lat:23.0430,lon:113.7634},{n:"中山市",p:"广东",c:"中山",lat:22.5159,lon:113.3926},{n:"江门市",p:"广东",c:"江门",lat:22.5787,lon:113.0819},{n:"阳江市",p:"广东",c:"阳江",lat:21.8582,lon:111.9826},{n:"湛江市",p:"广东",c:"湛江",lat:21.2707,lon:110.3577},{n:"茂名市",p:"广东",c:"茂名",lat:21.6632,lon:110.9256},{n:"肇庆市",p:"广东",c:"肇庆",lat:23.0471,lon:112.4651},{n:"清远市",p:"广东",c:"清远",lat:23.6820,lon:113.0560},{n:"潮州市",p:"广东",c:"潮州",lat:23.6569,lon:116.6226},{n:"揭阳市",p:"广东",c:"揭阳",lat:23.5497,lon:116.3727},{n:"云浮市",p:"广东",c:"云浮",lat:22.9152,lon:112.0445},
+  {n:"越秀区",p:"广东",c:"广州",lat:23.1288,lon:113.2668},{n:"天河区",p:"广东",c:"广州",lat:23.1247,lon:113.3617},{n:"海珠区",p:"广东",c:"广州",lat:23.0833,lon:113.3173},{n:"白云区",p:"广东",c:"广州",lat:23.1579,lon:113.2732},{n:"番禺区",p:"广东",c:"广州",lat:22.9374,lon:113.3842},{n:"南沙区",p:"广东",c:"广州",lat:22.8016,lon:113.5252},{n:"福田区",p:"广东",c:"深圳",lat:22.5210,lon:114.0545},{n:"南山区",p:"广东",c:"深圳",lat:22.5329,lon:113.9305},{n:"罗湖区",p:"广东",c:"深圳",lat:22.5481,lon:114.1315},{n:"宝安区",p:"广东",c:"深圳",lat:22.5552,lon:113.8830},{n:"龙岗区",p:"广东",c:"深圳",lat:22.7198,lon:114.2477},{n:"龙华区",p:"广东",c:"深圳",lat:22.6575,lon:114.0461},{n:"禅城区",p:"广东",c:"佛山",lat:23.0095,lon:113.1227},{n:"南海区",p:"广东",c:"佛山",lat:23.0288,lon:113.1428},{n:"顺德区",p:"广东",c:"佛山",lat:22.8053,lon:113.2934},{n:"香洲区",p:"广东",c:"珠海",lat:22.2669,lon:113.5436},{n:"惠城区",p:"广东",c:"惠州",lat:23.0839,lon:114.3823},
+
+  // ======== 广西 ========
+  {n:"南宁市",p:"广西",c:"南宁",lat:22.8170,lon:108.3665},{n:"柳州市",p:"广西",c:"柳州",lat:24.3257,lon:109.4155},{n:"桂林市",p:"广西",c:"桂林",lat:25.2736,lon:110.2900},{n:"梧州市",p:"广西",c:"梧州",lat:23.4767,lon:111.2791},{n:"北海市",p:"广西",c:"北海",lat:21.4809,lon:109.1199},{n:"防城港市",p:"广西",c:"防城港",lat:21.6871,lon:108.3547},{n:"钦州市",p:"广西",c:"钦州",lat:21.9799,lon:108.6543},{n:"贵港市",p:"广西",c:"贵港",lat:23.1119,lon:109.5989},{n:"玉林市",p:"广西",c:"玉林",lat:22.6540,lon:110.1812},{n:"百色市",p:"广西",c:"百色",lat:23.9023,lon:106.6183},{n:"贺州市",p:"广西",c:"贺州",lat:24.4036,lon:111.5668},{n:"河池市",p:"广西",c:"河池",lat:24.6929,lon:108.0854},{n:"来宾市",p:"广西",c:"来宾",lat:23.7502,lon:109.2214},{n:"崇左市",p:"广西",c:"崇左",lat:22.3789,lon:107.3649},
+  {n:"青秀区",p:"广西",c:"南宁",lat:22.7862,lon:108.4951},{n:"兴宁区",p:"广西",c:"南宁",lat:22.8543,lon:108.3688},{n:"秀峰区",p:"广西",c:"桂林",lat:25.2740,lon:110.2898},{n:"阳朔县",p:"广西",c:"桂林",lat:24.7785,lon:110.4966},{n:"银海区",p:"广西",c:"北海",lat:21.4491,lon:109.1393},
+
+  // ======== 海南 ========
+  {n:"海口市",p:"海南",c:"海口",lat:20.0440,lon:110.1999},{n:"三亚市",p:"海南",c:"三亚",lat:18.2528,lon:109.5120},{n:"儋州市",p:"海南",c:"儋州",lat:19.5213,lon:109.5803},{n:"三沙市",p:"海南",c:"三沙",lat:16.8310,lon:112.3355},
+  {n:"美兰区",p:"海南",c:"海口",lat:20.0289,lon:110.3668},{n:"龙华区",p:"海南",c:"海口",lat:20.0309,lon:110.3286},{n:"琼山区",p:"海南",c:"海口",lat:20.0011,lon:110.3839},{n:"天涯区",p:"海南",c:"三亚",lat:18.2477,lon:109.5064},{n:"海棠区",p:"海南",c:"三亚",lat:18.2350,lon:109.5968},{n:"吉阳区",p:"海南",c:"三亚",lat:18.2819,lon:109.5783},{n:"崖州区",p:"海南",c:"三亚",lat:18.3572,lon:109.1718},
+
+  // ======== 四川 ========
+  {n:"成都市",p:"四川",c:"成都",lat:30.5728,lon:104.0668},{n:"自贡市",p:"四川",c:"自贡",lat:29.3390,lon:104.7784},{n:"攀枝花市",p:"四川",c:"攀枝花",lat:26.5821,lon:101.7180},{n:"泸州市",p:"四川",c:"泸州",lat:28.8718,lon:105.4424},{n:"德阳市",p:"四川",c:"德阳",lat:31.1270,lon:104.3980},{n:"绵阳市",p:"四川",c:"绵阳",lat:31.4675,lon:104.6786},{n:"广元市",p:"四川",c:"广元",lat:32.4357,lon:105.8436},{n:"遂宁市",p:"四川",c:"遂宁",lat:30.5326,lon:105.5929},{n:"内江市",p:"四川",c:"内江",lat:29.5802,lon:105.0584},{n:"乐山市",p:"四川",c:"乐山",lat:29.5521,lon:103.7656},{n:"南充市",p:"四川",c:"南充",lat:30.8378,lon:106.1107},{n:"眉山市",p:"四川",c:"眉山",lat:30.0755,lon:103.8485},{n:"宜宾市",p:"四川",c:"宜宾",lat:28.7512,lon:104.6433},{n:"广安市",p:"四川",c:"广安",lat:30.4559,lon:106.6328},{n:"达州市",p:"四川",c:"达州",lat:31.2096,lon:107.4680},{n:"雅安市",p:"四川",c:"雅安",lat:29.9805,lon:103.0133},{n:"巴中市",p:"四川",c:"巴中",lat:31.8677,lon:106.7475},{n:"资阳市",p:"四川",c:"资阳",lat:30.1286,lon:104.6276},{n:"阿坝藏族羌族自治州",p:"四川",c:"阿坝",lat:31.8994,lon:102.2246},{n:"甘孜藏族自治州",p:"四川",c:"甘孜",lat:30.0493,lon:101.9627},{n:"凉山彝族自治州",p:"四川",c:"凉山",lat:27.8816,lon:102.2675},
+  {n:"锦江区",p:"四川",c:"成都",lat:30.6561,lon:104.0835},{n:"青羊区",p:"四川",c:"成都",lat:30.6740,lon:104.0615},{n:"武侯区",p:"四川",c:"成都",lat:30.6419,lon:104.0434},{n:"成华区",p:"四川",c:"成都",lat:30.6604,lon:104.1015},{n:"金牛区",p:"四川",c:"成都",lat:30.6903,lon:104.0523},{n:"高新区",p:"四川",c:"成都",lat:30.5723,lon:104.0640},{n:"天府新区",p:"四川",c:"成都",lat:30.4948,lon:104.0815},{n:"都江堰市",p:"四川",c:"成都",lat:30.9884,lon:103.6469},{n:"峨眉山市",p:"四川",c:"乐山",lat:29.6012,lon:103.4845},{n:"西昌市",p:"四川",c:"凉山",lat:27.8943,lon:102.2634},{n:"九寨沟县",p:"四川",c:"阿坝",lat:33.2522,lon:104.2337},
+
+  // ======== 贵州 ========
+  {n:"贵阳市",p:"贵州",c:"贵阳",lat:26.6470,lon:106.6302},{n:"六盘水市",p:"贵州",c:"六盘水",lat:26.5925,lon:104.8304},{n:"遵义市",p:"贵州",c:"遵义",lat:27.7250,lon:106.9272},{n:"安顺市",p:"贵州",c:"安顺",lat:26.2531,lon:105.9476},{n:"毕节市",p:"贵州",c:"毕节",lat:27.2985,lon:105.3050},{n:"铜仁市",p:"贵州",c:"铜仁",lat:27.6907,lon:109.1809},{n:"黔西南布依族苗族自治州",p:"贵州",c:"黔西南",lat:25.0899,lon:104.9041},{n:"黔东南苗族侗族自治州",p:"贵州",c:"黔东南",lat:26.5834,lon:107.9831},{n:"黔南布依族苗族自治州",p:"贵州",c:"黔南",lat:26.2531,lon:107.5223},
+  {n:"南明区",p:"贵州",c:"贵阳",lat:26.5686,lon:106.7144},{n:"云岩区",p:"贵州",c:"贵阳",lat:26.6049,lon:106.7243},{n:"观山湖区",p:"贵州",c:"贵阳",lat:26.5883,lon:106.6224},{n:"红花岗区",p:"贵州",c:"遵义",lat:27.6932,lon:106.8937},{n:"凯里市",p:"贵州",c:"黔东南",lat:26.5669,lon:107.9806},
+
+  // ======== 云南 ========
+  {n:"昆明市",p:"云南",c:"昆明",lat:25.0389,lon:102.7183},{n:"曲靖市",p:"云南",c:"曲靖",lat:25.4900,lon:103.7963},{n:"玉溪市",p:"云南",c:"玉溪",lat:24.3518,lon:102.5466},{n:"保山市",p:"云南",c:"保山",lat:25.1205,lon:99.1690},{n:"昭通市",p:"云南",c:"昭通",lat:27.3383,lon:103.7168},{n:"丽江市",p:"云南",c:"丽江",lat:26.8567,lon:100.2271},{n:"普洱市",p:"云南",c:"普洱",lat:22.8251,lon:100.9662},{n:"临沧市",p:"云南",c:"临沧",lat:23.8868,lon:100.0888},{n:"楚雄彝族自治州",p:"云南",c:"楚雄",lat:25.0329,lon:101.5458},{n:"红河哈尼族彝族自治州",p:"云南",c:"红河",lat:23.3690,lon:102.4208},{n:"文山壮族苗族自治州",p:"云南",c:"文山",lat:23.3985,lon:104.2150},{n:"西双版纳傣族自治州",p:"云南",c:"西双版纳",lat:22.0075,lon:100.7973},{n:"大理白族自治州",p:"云南",c:"大理",lat:25.6065,lon:100.2676},{n:"德宏傣族景颇族自治州",p:"云南",c:"德宏",lat:24.4333,lon:98.5853},{n:"怒江傈僳族自治州",p:"云南",c:"怒江",lat:25.8176,lon:98.8567},{n:"迪庆藏族自治州",p:"云南",c:"迪庆",lat:27.8186,lon:99.7034},
+  {n:"五华区",p:"云南",c:"昆明",lat:25.0436,lon:102.7069},{n:"盘龙区",p:"云南",c:"昆明",lat:25.0406,lon:102.7518},{n:"官渡区",p:"云南",c:"昆明",lat:25.0150,lon:102.7437},{n:"西山区",p:"云南",c:"昆明",lat:25.0379,lon:102.6646},{n:"古城区",p:"云南",c:"丽江",lat:26.8768,lon:100.2257},{n:"大理市",p:"云南",c:"大理",lat:25.6065,lon:100.2676},{n:"景洪市",p:"云南",c:"西双版纳",lat:22.0075,lon:100.7973},{n:"香格里拉市",p:"云南",c:"迪庆",lat:27.8186,lon:99.7034},{n:"瑞丽市",p:"云南",c:"德宏",lat:24.0122,lon:97.8515},{n:"腾冲市",p:"云南",c:"保山",lat:25.0205,lon:98.4905},
+
+  // ======== 西藏 ========
+  {n:"拉萨市",p:"西藏",c:"拉萨",lat:29.6500,lon:91.1000},{n:"日喀则市",p:"西藏",c:"日喀则",lat:29.2669,lon:88.8804},{n:"昌都市",p:"西藏",c:"昌都",lat:31.1407,lon:97.1720},{n:"林芝市",p:"西藏",c:"林芝",lat:29.6487,lon:94.3615},{n:"山南市",p:"西藏",c:"山南",lat:29.2371,lon:91.7731},{n:"那曲市",p:"西藏",c:"那曲",lat:31.4762,lon:92.0512},{n:"阿里地区",p:"西藏",c:"阿里",lat:32.5011,lon:80.1050},
+  {n:"城关区",p:"西藏",c:"拉萨",lat:29.6547,lon:91.1406},{n:"堆龙德庆区",p:"西藏",c:"拉萨",lat:29.6463,lon:91.0033},
+
+  // ======== 陕西 ========
+  {n:"西安市",p:"陕西",c:"西安",lat:34.3416,lon:108.9398},{n:"铜川市",p:"陕西",c:"铜川",lat:34.8969,lon:108.9451},{n:"宝鸡市",p:"陕西",c:"宝鸡",lat:34.3632,lon:107.2378},{n:"咸阳市",p:"陕西",c:"咸阳",lat:34.3287,lon:108.7091},{n:"渭南市",p:"陕西",c:"渭南",lat:34.4991,lon:109.5098},{n:"延安市",p:"陕西",c:"延安",lat:36.5854,lon:109.4897},{n:"汉中市",p:"陕西",c:"汉中",lat:33.0676,lon:107.0238},{n:"榆林市",p:"陕西",c:"榆林",lat:38.2852,lon:109.7346},{n:"安康市",p:"陕西",c:"安康",lat:32.6847,lon:109.0290},{n:"商洛市",p:"陕西",c:"商洛",lat:33.8727,lon:109.9184},
+  {n:"未央区",p:"陕西",c:"西安",lat:34.2929,lon:108.9470},{n:"新城区",p:"陕西",c:"西安",lat:34.2665,lon:108.9607},{n:"碑林区",p:"陕西",c:"西安",lat:34.2306,lon:108.9342},{n:"莲湖区",p:"陕西",c:"西安",lat:34.2651,lon:108.9440},{n:"雁塔区",p:"陕西",c:"西安",lat:34.2142,lon:108.9486},{n:"长安区",p:"陕西",c:"西安",lat:34.1571,lon:108.9069},{n:"临潼区",p:"陕西",c:"西安",lat:34.3672,lon:109.2142},{n:"秦都区",p:"陕西",c:"咸阳",lat:34.3290,lon:108.7063},{n:"宝塔区",p:"陕西",c:"延安",lat:36.5853,lon:109.4932},{n:"汉台区",p:"陕西",c:"汉中",lat:33.0678,lon:107.0318},
+
+  // ======== 甘肃 ========
+  {n:"兰州市",p:"甘肃",c:"兰州",lat:36.0611,lon:103.8343},{n:"嘉峪关市",p:"甘肃",c:"嘉峪关",lat:39.7720,lon:98.2891},{n:"金昌市",p:"甘肃",c:"金昌",lat:38.5201,lon:102.1876},{n:"白银市",p:"甘肃",c:"白银",lat:36.5447,lon:104.1386},{n:"天水市",p:"甘肃",c:"天水",lat:34.5808,lon:105.7249},{n:"武威市",p:"甘肃",c:"武威",lat:37.9280,lon:102.6378},{n:"张掖市",p:"甘肃",c:"张掖",lat:38.9317,lon:100.4498},{n:"平凉市",p:"甘肃",c:"平凉",lat:35.5430,lon:106.6653},{n:"酒泉市",p:"甘肃",c:"酒泉",lat:39.7325,lon:98.4940},{n:"庆阳市",p:"甘肃",c:"庆阳",lat:35.7097,lon:107.6429},{n:"定西市",p:"甘肃",c:"定西",lat:35.5806,lon:104.6256},{n:"陇南市",p:"甘肃",c:"陇南",lat:33.4007,lon:104.9219},{n:"临夏回族自治州",p:"甘肃",c:"临夏",lat:35.6012,lon:103.2108},{n:"甘南藏族自治州",p:"甘肃",c:"甘南",lat:34.9833,lon:102.9112},
+  {n:"城关区",p:"甘肃",c:"兰州",lat:36.0570,lon:103.8254},{n:"七里河区",p:"甘肃",c:"兰州",lat:36.0658,lon:103.7859},{n:"安宁区",p:"甘肃",c:"兰州",lat:36.1042,lon:103.7191},{n:"敦煌市",p:"甘肃",c:"酒泉",lat:40.1421,lon:94.6620},
+
+  // ======== 青海 ========
+  {n:"西宁市",p:"青海",c:"西宁",lat:36.6171,lon:101.7785},{n:"海东市",p:"青海",c:"海东",lat:36.5020,lon:102.4104},{n:"海北藏族自治州",p:"青海",c:"海北",lat:36.9544,lon:100.9009},{n:"黄南藏族自治州",p:"青海",c:"黄南",lat:35.5199,lon:102.0150},{n:"海南藏族自治州",p:"青海",c:"海南州",lat:36.2866,lon:100.6200},{n:"果洛藏族自治州",p:"青海",c:"果洛",lat:34.4716,lon:100.2449},{n:"玉树藏族自治州",p:"青海",c:"玉树",lat:33.0050,lon:97.0065},{n:"海西蒙古族藏族自治州",p:"青海",c:"海西",lat:37.3771,lon:97.3712},
+  {n:"城中区",p:"青海",c:"西宁",lat:36.6233,lon:101.7841},{n:"城西区",p:"青海",c:"西宁",lat:36.6283,lon:101.7658},
+
+  // ======== 宁夏 ========
+  {n:"银川市",p:"宁夏",c:"银川",lat:38.4872,lon:106.2309},{n:"石嘴山市",p:"宁夏",c:"石嘴山",lat:38.9841,lon:106.3846},{n:"吴忠市",p:"宁夏",c:"吴忠",lat:37.9976,lon:106.1988},{n:"固原市",p:"宁夏",c:"固原",lat:36.0156,lon:106.2426},{n:"中卫市",p:"宁夏",c:"中卫",lat:37.4999,lon:105.1968},
+  {n:"兴庆区",p:"宁夏",c:"银川",lat:38.4734,lon:106.2888},{n:"金凤区",p:"宁夏",c:"银川",lat:38.4733,lon:106.2391},{n:"西夏区",p:"宁夏",c:"银川",lat:38.5024,lon:106.1615},
+
+  // ======== 新疆 ========
+  {n:"乌鲁木齐市",p:"新疆",c:"乌鲁木齐",lat:43.8256,lon:87.6168},{n:"克拉玛依市",p:"新疆",c:"克拉玛依",lat:45.5800,lon:84.8892},{n:"吐鲁番市",p:"新疆",c:"吐鲁番",lat:42.9736,lon:89.1902},{n:"哈密市",p:"新疆",c:"哈密",lat:42.8185,lon:93.5149},{n:"昌吉回族自治州",p:"新疆",c:"昌吉",lat:44.0112,lon:87.2675},{n:"博尔塔拉蒙古自治州",p:"新疆",c:"博尔塔拉",lat:44.9059,lon:82.0665},{n:"巴音郭楞蒙古自治州",p:"新疆",c:"巴音郭楞",lat:41.7337,lon:86.1747},{n:"阿克苏地区",p:"新疆",c:"阿克苏地区",lat:41.1688,lon:80.2606},{n:"克孜勒苏柯尔克孜自治州",p:"新疆",c:"克孜勒苏",lat:39.7145,lon:76.1667},{n:"喀什地区",p:"新疆",c:"喀什地区",lat:39.4704,lon:75.9898},{n:"和田地区",p:"新疆",c:"和田地区",lat:37.1136,lon:79.9223},{n:"伊犁哈萨克自治州",p:"新疆",c:"伊犁",lat:43.9172,lon:81.3238},{n:"塔城地区",p:"新疆",c:"塔城地区",lat:46.7464,lon:82.9802},{n:"阿勒泰地区",p:"新疆",c:"阿勒泰地区",lat:47.8449,lon:88.1413},
+  {n:"天山区",p:"新疆",c:"乌鲁木齐",lat:43.7945,lon:87.6318},{n:"沙依巴克区",p:"新疆",c:"乌鲁木齐",lat:43.8010,lon:87.5982},{n:"新市区",p:"新疆",c:"乌鲁木齐",lat:43.8436,lon:87.5742},{n:"喀什市",p:"新疆",c:"喀什地区",lat:39.4704,lon:75.9898},{n:"伊宁市",p:"新疆",c:"伊犁",lat:43.9172,lon:81.3238},{n:"库尔勒市",p:"新疆",c:"巴音郭楞",lat:41.7263,lon:86.1737},
+
+  // ======== 台湾 ========
+  {n:"台北市",p:"台湾",c:"台北",lat:25.0330,lon:121.5654},{n:"高雄市",p:"台湾",c:"高雄",lat:22.6273,lon:120.3014},{n:"台中市",p:"台湾",c:"台中",lat:24.1477,lon:120.6736},{n:"台南市",p:"台湾",c:"台南",lat:22.9999,lon:120.2269},{n:"基隆市",p:"台湾",c:"基隆",lat:25.1276,lon:121.7392},{n:"新竹市",p:"台湾",c:"新竹",lat:24.8035,lon:120.9686},{n:"嘉义市",p:"台湾",c:"嘉义",lat:23.4800,lon:120.4493},
+
+  // ======== 香港/澳门 ========
+  {n:"中西区",p:"香港",c:"香港",lat:22.2864,lon:114.1550},{n:"湾仔区",p:"香港",c:"香港",lat:22.2764,lon:114.1708},{n:"东区",p:"香港",c:"香港",lat:22.2833,lon:114.2258},{n:"九龙城区",p:"香港",c:"香港",lat:22.3278,lon:114.1911},{n:"油尖旺区",p:"香港",c:"香港",lat:22.3024,lon:114.1733},{n:"澳门半岛",p:"澳门",c:"澳门",lat:22.1987,lon:113.5439},{n:"氹仔岛",p:"澳门",c:"澳门",lat:22.1564,lon:113.5596},
+];
+
+// Build index for fast search
+const searchIndex = [];
+for (const c of chinaAll) {
+  const isMunicipality = ['北京','上海','天津','重庆'].includes(c.p);
+  // Display text for dropdown
+  let displayPath;
+  if (isMunicipality) {
+    // 直辖市: show as "区名 · 市名"
+    displayPath = c.n + (c.n === c.p ? '' : ' · ' + c.p);
+  } else if (c.p === c.c || c.c === '') {
+    // Province-level or prefecture-level city
+    displayPath = c.n + ' · ' + c.p;
+  } else {
+    // District/county under prefecture city
+    displayPath = c.n + ' · ' + c.c + ' · ' + c.p;
+  }
+  // Search tokens: all parts of the name + province + city
+  const tokens = [c.n, c.p, c.c].filter(Boolean).join(' ').toLowerCase();
+  searchIndex.push({...c, displayPath, tokens});
+}
+
+function geocodeLocal(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const results = [];
+  for (const item of searchIndex) {
+    if (item.tokens.includes(q) || item.n.toLowerCase().startsWith(q) || item.p.toLowerCase().includes(q)) {
+      results.push(item);
+    }
+  }
+  // Sort: exact name match first, then by name length (shorter=more likely)
+  results.sort((a, b) => {
+    const aEx = a.n.toLowerCase() === q ? 0 : 1;
+    const bEx = b.n.toLowerCase() === q ? 0 : 1;
+    if (aEx !== bEx) return aEx - bEx;
+    return a.n.length - b.n.length;
+  });
+  return results.slice(0, 8);
+}
+
+async function geocode(query) {
+  const local = geocodeLocal(query);
+  if (local.length > 0) return local;
+  try {
+    const res = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(query) + '&count=5&language=zh');
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.results) return [];
+    return data.results.map(r => ({
+      n: r.name, p: r.admin1 || r.country || '', c: r.admin1 || '',
+      lat: r.latitude, lon: r.longitude,
+      displayPath: r.name + ' · ' + (r.admin1 || r.country || ''),
+      tokens: (r.name + ' ' + (r.admin1 || '') + ' ' + (r.country || '')).toLowerCase()
+    }));
+  } catch (e) { return []; }
+}
+
+// ========== Weather API ==========
+async function fetchWeather(lat, lon) {
+  const params = 'latitude=' + lat + '&longitude=' + lon +
+    '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max' +
+    '&hourly=apparent_temperature,relative_humidity_2m,visibility,pressure_msl&timezone=auto&forecast_days=5';
+  const res = await fetch('https://api.open-meteo.com/v1/forecast?' + params);
+  if (!res.ok) throw new Error('天气数据请求失败');
+  return res.json();
+}
+
+// ========== Weather Mapping ==========
+const weatherMap = {
+  '☀️ 晴': [[0]], '🌤️ 大部晴朗': [[1]], '⛅ 多云': [[2]], '☁️ 阴天': [[3]], '🌫️ 雾': [[45,48]],
+  '🌦️ 毛毛雨': [[51,53,55,56,57]], '🌧️ 雨': [[61,63,65,66,67]], '🌨️ 雪': [[71,73,75,77,85,86]],
+  '🌧️ 阵雨': [[80,81,82]], '⛈️ 雷暴': [[95,96,99]],
+};
+function getWeather(wmo) {
+  for (const [l, gs] of Object.entries(weatherMap)) for (const g of gs) if (g.includes(wmo)) return l.split(' ');
+  return ['🌈', '未知天气'];
+}
+function windDirection(deg) { return ['北', '东北', '东', '东南', '南', '西南', '西', '西北'][Math.round(deg / 45) % 8]; }
+function formatTime(iso) { if (!iso) return '--:--'; return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
+
+// ========== Local Food & Attraction DB ==========
+const cityGuide = {
+  '北京':{food:[{n:'北京烤鸭',d:'外酥里嫩，皮脆肉香，用薄饼卷甜面酱葱丝黄瓜，入口即化'},{n:'炸酱面',d:'筋道手擀面配浓郁黄酱肉丁，黄瓜豆芽当菜码，老北京家常味'},{n:'涮羊肉',d:'铜锅炭火清汤涮鲜切羊肉，蘸芝麻酱韭菜花，冬天一绝'},{n:'豆汁儿焦圈',d:'发酵绿豆汁配炸面圈，酸香独特，老北京人的早餐标配'},{n:'卤煮火烧',d:'猪肠猪肺豆腐泡在浓汤里煮，配火烧，市井烟火气十足'},{n:'炒肝儿',d:'猪肝猪肠勾芡浓汤，蒜香浓郁，配包子吃的地道早点'},{n:'豌豆黄',d:'细腻绵密的豌豆泥甜品，入口即化，宫廷点心传承'}],attractions:[{n:'故宫',d:'明清两代皇宫，世界最大宫殿群，9000间房，红墙金瓦气势恢宏'},{n:'长城',d:'万里长城精华段在八达岭、慕田峪，雄伟壮观的世界奇迹'},{n:'天安门广场',d:'世界最大城市广场，国旗升旗仪式庄严肃穆'},{n:'颐和园',d:'皇家园林典范，昆明湖万寿山，长廊画廊精美绝伦'},{n:'天坛',d:'明清皇帝祭天之所，祈年殿回音壁举世闻名'},{n:'南锣鼓巷',d:'老北京胡同文化代表，文创小店咖啡馆林立'},{n:'798艺术区',d:'旧工厂改造的当代艺术聚集地，画廊展览餐厅云集'}]},
+  '上海':{food:[{n:'小笼包',d:'南翔小笼皮薄汁多，咬开先喝汤，鲜肉蟹粉两种经典口味'},{n:'生煎包',d:'底部金黄焦脆，咬开热汤四溢，芝麻葱花点缀'},{n:'红烧肉',d:'本帮菜头牌，肥而不腻入口即化，浓油赤酱甜咸适口'},{n:'葱油拌面',d:'简单却极致，热油浇葱花激发出浓香，面条筋道'},{n:'蟹粉豆腐',d:'大闸蟹蟹黄蟹肉与嫩豆腐同烹，鲜美到极致'},{n:'糖醋排骨',d:'酸甜适中，肉质酥烂，上海人从小吃到大的家常味'},{n:'八宝辣酱',d:'虾仁鸡丁豆干花生等八种食材同炒，甜辣复合味'}],attractions:[{n:'外滩',d:'黄浦江畔万国建筑博览群，隔江望陆家嘴天际线'},{n:'东方明珠',d:'上海地标电视塔，悬空玻璃观景走廊俯瞰全城'},{n:'豫园',d:'明代江南园林，九曲桥湖心亭，城隍庙小吃街环绕'},{n:'南京路',d:'中国第一商业街，百年老店与国际品牌林立'},{n:'迪士尼乐园',d:'中国大陆首座迪士尼，奇幻童话城堡梦幻体验'},{n:'田子坊',d:'石库门里弄改造成的艺术街区，手工文创小店云集'},{n:'新天地',d:'石库门建筑群改造的时尚餐饮娱乐区'}]},
+  '广州':{food:[{n:'肠粉',d:'米浆蒸制薄如蝉翼，裹鲜虾牛肉淋豉油，爽滑鲜香'},{n:'白切鸡',d:'清远鸡白煮蘸姜葱油，皮爽肉滑原汁原味'},{n:'煲仔饭',d:'砂锅煮饭配腊味排骨，锅巴焦香米饭粒粒分明'},{n:'虾饺',d:'水晶皮透亮，整只鲜虾入馅，早茶四大天王之首'},{n:'叉烧',d:'蜜汁烤制的猪肉外焦里嫩，甜香浓郁，黯然销魂'},{n:'云吞面',d:'鲜虾云吞配竹升面，大地鱼熬汤，鲜到骨子里'},{n:'双皮奶',d:'顺德甜品之王，水牛奶蒸制双层奶皮，嫩滑香甜'}],attractions:[{n:'广州塔',d:'600米小蛮腰，夜晚灯光秀璀璨夺目，高空摩天轮'},{n:'白云山',d:'羊城第一秀，登顶俯瞰广州全景，天然氧吧'},{n:'沙面',d:'珠江边的欧陆风情小岛，百年领事馆建筑群'},{n:'陈家祠',d:'岭南建筑艺术明珠，精美木雕石雕砖雕令人叹为观止'},{n:'长隆',d:'亚洲顶级野生动物园+欢乐世界+水上乐园'},{n:'珠江夜游',d:'乘船夜游珠江，两岸灯火辉煌美不胜收'}]},
+  '深圳':{food:[{n:'光明乳鸽',d:'皮脆肉嫩汁多，深圳招牌美食，配一碗白粥绝了'},{n:'沙井蚝',d:'千年蚝乡特产，炭烤生蚝蒜蓉味最经典'},{n:'公明烧鹅',d:'荔枝木烤制，皮脆肉香，配酸梅酱解腻'},{n:'肠粉王',d:'深圳肠粉料足皮薄，牛肉鸡蛋加辣椒圈是灵魂'},{n:'椰子鸡',d:'海南文昌鸡配新鲜椰青水煮，蘸沙姜青柠，清甜鲜美'}],attractions:[{n:'世界之窗',d:'浓缩全球名胜，埃菲尔铁塔金字塔一天逛遍世界'},{n:'欢乐谷',d:'大型主题乐园，过山车跳楼机激流勇进'},{n:'深圳湾公园',d:'15公里滨海长廊，对面就是香港，日落绝美'},{n:'大梅沙',d:'免费海滨浴场，沙滩细腻海浪温柔'},{n:'莲花山',d:'山顶邓小平雕像俯瞰市民中心中轴线'}]},
+  '成都':{food:[{n:'火锅',d:'麻辣牛油锅底，毛肚鹅肠黄喉涮几秒入口，巴适得板'},{n:'串串香',d:'竹签串菜自选烫煮，配干碟油碟，市井烟火气'},{n:'麻婆豆腐',d:'嫩豆腐麻辣鲜烫，牛肉末花椒面是灵魂'},{n:'担担面',d:'芝麻酱花生碎肉末芽菜拌面，麻辣咸香'},{n:'龙抄手',d:'皮薄馅大的抄手，红油清汤两种吃法都安逸'},{n:'夫妻肺片',d:'牛杂切片淋红油花椒，麻辣鲜香回味无穷'},{n:'兔头',d:'成都人最爱的啃食小吃，麻辣五香两种口味'}],attractions:[{n:'宽窄巷子',d:'清代古街巷改造，一条宽一条窄，喝茶掏耳朵看变脸'},{n:'锦里',d:'三国主题古街，小吃手工艺品川剧变脸一条龙'},{n:'大熊猫基地',d:'看滚滚啃竹子打滚卖萌，萌化你的心'},{n:'都江堰',d:'两千年前的水利奇迹，至今灌溉成都平原'},{n:'武侯祠',d:'纪念诸葛亮的祠堂，三国迷必打卡'},{n:'青城山',d:'道教名山，清幽翠绿天然氧吧'},{n:'春熙路',d:'成都最繁华商业街，美女美食云集'}]},
+  '重庆':{food:[{n:'重庆火锅',d:'九宫格牛油红汤，毛肚鸭肠老肉片，越煮越香越过瘾'},{n:'重庆小面',d:'麻辣鲜香一碗面，二两刚好，早餐就要这个味'},{n:'酸辣粉',d:'红薯粉Q弹酸辣过瘾，花生碎榨菜末是标配'},{n:'毛血旺',d:'鸭血毛肚午餐肉豆芽一锅煮，红油滚滚麻辣鲜'},{n:'江湖菜',d:'辣子鸡泉水鸡来凤鱼，重庆人的豪爽都在菜里'},{n:'烤鱼',d:'万州烤鱼麻辣蒜香，配啤酒安逸惨了'}],attractions:[{n:'洪崖洞',d:'悬崖上的吊脚楼群，夜景像千与千寻，现实版汤屋'},{n:'解放碑',d:'重庆地标，周围商圈繁华，美女出没最多的地方'},{n:'磁器口',d:'千年古镇，陈麻花毛血旺酸辣粉逛吃不停'},{n:'长江索道',d:'飞渡长江的高空缆车，山城独有交通奇观'},{n:'武隆天生三桥',d:'世界自然遗产，变形金刚取景地，天坑地缝奇观'},{n:'南山一棵树',d:'俯瞰渝中半岛夜景，万家灯火璀璨如星'}]},
+  '杭州':{food:[{n:'西湖醋鱼',d:'草鱼烹制浇糖醋汁，酸甜嫩滑，楼外楼名菜'},{n:'东坡肉',d:'五花肉慢炖至酥烂，肥而不腻入口即化'},{n:'龙井虾仁',d:'龙井茶炒河虾仁，茶香虾鲜完美融合'},{n:'叫花鸡',d:'荷叶包裹煨烤的整鸡，肉香四溢，撕开瞬间香气扑鼻'},{n:'片儿川',d:'雪菜笋片肉丝煮面，杭州人从小吃到大的味道'},{n:'定胜糕',d:'米粉蒸制的粉色糕点，松软香甜寓意吉祥'},{n:'葱包烩',d:'薄饼卷油条葱段铁板压烤，酥脆咸香街头小吃'}],attractions:[{n:'西湖',d:'淡妆浓抹总相宜，断桥残雪苏堤春晓雷峰夕照，十景绝美'},{n:'灵隐寺',d:'千年古刹飞来峰石刻，香火鼎盛禅意盎然'},{n:'西溪湿地',d:'城中湿地公园，摇橹船穿芦苇荡，野趣十足'},{n:'宋城',d:'宋代主题乐园，千古情演出震撼人心'},{n:'雷峰塔',d:'白蛇传传说之地，登塔俯瞰西湖全景'},{n:'河坊街',d:'南宋古街，老字号小吃手工艺品一条街'}]},
+  '南京':{food:[{n:'盐水鸭',d:'桂花鸭皮白肉嫩咸鲜适口，金陵第一名菜'},{n:'鸭血粉丝汤',d:'鸭血鸭肠鸭肝粉丝豆腐泡，一碗鲜掉眉毛'},{n:'小笼包',d:'皮薄汁多，先开窗后喝汤，南京人日常'},{n:'牛肉锅贴',d:'金黄油煎外酥里嫩，牛肉馅鲜美多汁'},{n:'糖芋苗',d:'桂花糖水煮小芋头，软糯香甜南京传统甜品'},{n:'皮肚面',d:'炸猪皮配面条，大碗实在汤浓味厚'}],attractions:[{n:'中山陵',d:'孙中山先生陵寝，392级台阶气势恢宏'},{n:'夫子庙',d:'秦淮河畔千年文庙，桨声灯影美食街'},{n:'明孝陵',d:'朱元璋陵墓，神道石像庄严肃穆'},{n:'总统府',d:'民国总统办公地，中西合璧建筑群'},{n:'南京博物院',d:'中国三大博物馆之一，馆藏极为丰富'},{n:'玄武湖',d:'城中之湖，皇家园林气派，泛舟赏荷'}]},
+  '西安':{food:[{n:'肉夹馍',d:'腊汁肉剁碎夹白吉馍，一口下去满嘴流油，赛神仙'},{n:'羊肉泡馍',d:'自己掰馍越小越好，羊肉汤煮出浓香，配糖蒜辣椒酱'},{n:'凉皮',d:'秦镇米皮筋道爽滑，辣椒油蒜水醋，夏天一碗透心凉'},{n:'biangbiang面',d:'裤带宽的面条，油泼辣子滋滋作响，筋道过瘾'},{n:'葫芦头',d:'猪大肠泡馍，汤浓味厚，西安人深夜食堂'},{n:'灌汤包',d:'回民街贾三灌汤包，皮薄汤多一口一个'},{n:'甑糕',d:'糯米红枣层层蒸制，甜糯香浓的千年小吃'}],attractions:[{n:'兵马俑',d:'世界第八大奇迹，秦始皇地下军阵，千人千面震撼人心'},{n:'大雁塔',d:'玄奘取经归来建塔藏经，大唐不夜城就在脚下'},{n:'城墙',d:'中国保存最完整的古城墙，骑行一圈13.7公里'},{n:'回民街',d:'西安美食灵魂所在，烤肉泡馍凉皮吃到扶墙'},{n:'华清宫',d:'杨贵妃沐浴之地，长恨歌实景演出美轮美奂'},{n:'钟鼓楼',d:'西安城中心地标，晨钟暮鼓千年回响'}]},
+  '武汉':{food:[{n:'热干面',d:'碱面拌芝麻酱萝卜丁葱花，武汉人的灵魂早餐'},{n:'豆皮',d:'糯米豆干香菇包裹在豆皮里煎至金黄，外酥内糯'},{n:'鸭脖',d:'精武鸭脖周黑鸭，麻辣鲜香啃到停不下来'},{n:'面窝',d:'米浆炸成圆圈状，外酥内软，过早必吃'},{n:'莲藕排骨汤',d:'洪湖粉藕炖排骨，汤浓藕粉，湖北人的乡愁'},{n:'武昌鱼',d:'才饮长江水又食武昌鱼，清蒸红烧都鲜美'}],attractions:[{n:'黄鹤楼',d:'天下江山第一楼，登楼望长江大桥气势磅礴'},{n:'东湖',d:'中国最大城中湖，绿道骑行樱花季美不胜收'},{n:'户部巷',d:'汉味小吃第一巷，热干面豆皮面窝吃到爽'},{n:'湖北省博物馆',d:'曾侯乙编钟越王勾践剑，国宝云集'},{n:'武汉长江大桥',d:'万里长江第一桥，徒步过江看两岸风光'},{n:'江汉路',d:'百年商业街，民国建筑与现代商铺交相辉映'}]},
+  '长沙':{food:[{n:'臭豆腐',d:'黑色臭豆腐炸至外酥里嫩，灌汤蒜蓉辣椒，闻着臭吃着香'},{n:'口味虾',d:'麻辣小龙虾配冰啤酒，长沙夏天的灵魂'},{n:'剁椒鱼头',d:'大鱼头铺满剁辣椒蒸制，鲜辣嫩滑米饭杀手'},{n:'糖油粑粑',d:'糯米团子油炸裹糖浆，外酥里糯甜到心里'},{n:'辣椒炒肉',d:'湖南人心中第一下饭菜，樟树港辣椒炒五花肉'},{n:'嗦粉',d:'长沙米粉扁而薄，盖码牛肉排骨辣椒炒肉样样香'}],attractions:[{n:'橘子洲',d:'湘江中的长岛，毛泽东青年雕像雄伟壮观'},{n:'岳麓山',d:'千年学府岳麓书院，爱晚亭秋色美如画'},{n:'太平街',d:'千年古街，臭豆腐糖油粑粑茶颜悦色一路逛吃'},{n:'湖南省博物馆',d:'马王堆汉墓辛追夫人千年不朽女尸震惊世界'},{n:'橘子洲烟花',d:'节假日烟花燃放，湘江上空绚烂夺目'}]},
+  '苏州':{food:[{n:'松鼠桂鱼',d:'整条鱼开花刀炸成松鼠形，浇糖醋汁，形美味鲜'},{n:'阳澄湖大闸蟹',d:'秋风起蟹脚痒，蟹黄饱满蟹肉鲜甜，蘸姜醋绝佳'},{n:'响油鳝糊',d:'鳝丝浇热油滋滋作响，浓油赤酱鲜美无比'},{n:'桂花糖藕',d:'糯米灌莲藕配桂花糖浆，香甜软糯江南风味'},{n:'碧螺虾仁',d:'碧螺春茶炒太湖白虾仁，茶香虾鲜'},{n:'苏式汤面',d:'红汤白汤两派，浇头丰富，清晨一碗暖心暖胃'}],attractions:[{n:'拙政园',d:'中国四大名园之首，江南园林典范，一步一景'},{n:'虎丘',d:'吴中第一名胜，虎丘塔斜而不倒千年屹立'},{n:'平江路',d:'千年古街小桥流水，文创茶馆小吃鳞次栉比'},{n:'山塘街',d:'七里山塘到虎丘，乘船游古街看江南水乡'},{n:'周庄',d:'中国第一水乡，小桥流水人家，沈厅张厅古韵悠长'},{n:'寒山寺',d:'姑苏城外寒山寺，夜半钟声到客船，千年诗意'}]},
+  '昆明':{food:[{n:'过桥米线',d:'滚烫鸡汤配薄切肉片蔬菜米线，仪式感满满'},{n:'汽锅鸡',d:'建水紫陶汽锅蒸鸡不加一滴水，原汁原味鲜美至极'},{n:'野生菌火锅',d:'云南菌子季鸡汤煮各种野生菌，鲜到眉毛掉下来'},{n:'宜良烤鸭',d:'松毛烤制皮酥肉嫩，不比北京烤鸭差'},{n:'破酥包',d:'层层酥皮包裹肉馅或甜馅，蒸熟后酥软掉渣'},{n:'鲜花饼',d:'玫瑰花瓣入馅烤制，花香四溢的云南伴手礼'}],attractions:[{n:'滇池',d:'高原明珠五百里，西山龙门俯瞰湖水，海鸥漫天'},{n:'石林',d:'喀斯特地貌奇观，怪石嶙峋如森林，世界自然遗产'},{n:'翠湖',d:'市中心的城市之肺，冬天红嘴鸥飞舞美不胜收'},{n:'云南民族村',d:'26个民族村寨一站体验，歌舞表演民族风情浓郁'},{n:'东川红土地',d:'上帝打翻的调色盘，摄影爱好者的天堂'}]},
+  '哈尔滨':{food:[{n:'锅包肉',d:'猪里脊挂糊炸至金黄浇糖醋汁，外酥里嫩酸甜可口'},{n:'红肠',d:'俄式熏肠蒜香浓郁，直接吃炒菜做三明治都绝'},{n:'大列巴',d:'俄式大面包外硬内软，配红肠酸黄瓜哈尔滨标配'},{n:'杀猪菜',d:'酸菜炖血肠白肉，东北农村过年的仪式感'},{n:'马迭尔冰棍',d:'百年品牌，奶香浓郁，中央大街边走边吃'},{n:'铁锅炖',d:'大铁锅炖鱼炖鸡炖大鹅，锅边贴玉米饼子'}],attractions:[{n:'中央大街',d:'百年欧式建筑街，面包石铺路，马迭尔冰棍必吃'},{n:'冰雪大世界',d:'冬季限定冰雕雪雕梦幻城堡，世界最大冰雪主题乐园'},{n:'圣索菲亚教堂',d:'远东最大东正教堂，拜占庭风格洋葱头顶'},{n:'太阳岛',d:'松花江中的避暑胜地，夏日音乐节冬日雪博会'},{n:'松花江',d:'冬天江面冻成天然冰场，滑冰狗拉爬犁冰滑梯'}]},
+  '拉萨':{food:[{n:'藏面',d:'牦牛肉汤配青稞面条，简单却回味无穷'},{n:'甜茶',d:'红茶牛奶白糖煮制，拉萨人的社交饮品'},{n:'酥油茶',d:'酥油盐巴茶叶搅打成咸香热饮，高原能量补给'},{n:'牦牛肉干',d:'风干的牦牛肉条，越嚼越香，高原零食之王'},{n:'糌粑',d:'青稞炒面拌酥油茶捏团吃，藏族主食'},{n:'藏包子',d:'牦牛肉馅蒸饺，皮薄馅大肉香浓郁'}],attractions:[{n:'布达拉宫',d:'世界屋脊上的宫殿，红宫白宫金碧辉煌，藏传佛教圣地'},{n:'大昭寺',d:'藏传佛教最神圣的寺庙，释迦牟尼12岁等身像所在地'},{n:'八廓街',d:'围绕大昭寺的转经道，磕长头的朝圣者虔诚令人动容'},{n:'纳木错',d:'西藏三大圣湖之一，湖水湛蓝雪山环绕，天堂不过如此'},{n:'羊卓雍措',d:'羊湖碧蓝如宝石，从岗巴拉山口俯瞰美到窒息'},{n:'色拉寺',d:'看喇嘛辩经，击掌声此起彼伏场面震撼'}]},
+  '三亚':{food:[{n:'海鲜',d:'第一市场自己挑海鲜，旁边加工店清蒸白灼椒盐怎么做都鲜'},{n:'椰子饭',d:'糯米椰浆灌入椰子蒸制，椰香浓郁甜而不腻'},{n:'清补凉',d:'椰奶底配绿豆红豆薏米椰肉水果，消暑神器'},{n:'文昌鸡',d:'海南四大名菜之首，皮爽肉滑蘸蒜蓉酱油'},{n:'抱罗粉',d:'海南腌粉浇卤汁配花生酸菜，酸爽开胃'},{n:'椰子鸡',d:'新鲜椰子水煮文昌鸡，汤甜肉嫩蘸沙姜青柠'}],attractions:[{n:'亚龙湾',d:'天下第一湾，沙滩洁白细腻海水清澈见底'},{n:'天涯海角',d:'南天一柱天涯石海角石，海誓山盟之地'},{n:'蜈支洲岛',d:'中国的马尔代夫，潜水看珊瑚热带鱼'},{n:'南山寺',d:'108米海上观音像庄严慈祥，面朝南海'},{n:'鹿回头',d:'山顶俯瞰三亚湾全景，日落时分浪漫至极'}]},
+  '厦门':{food:[{n:'沙茶面',d:'浓稠沙茶酱汤配海鲜豆腐猪肝，闽南灵魂小吃'},{n:'海蛎煎',d:'鲜海蛎配红薯粉鸡蛋煎至金黄，蘸甜辣酱'},{n:'土笋冻',d:'沙虫熬制凝成冻，蘸酱油醋蒜蓉芥末，Q弹爽口'},{n:'姜母鸭',d:'老姜麻油炖番鸭，暖胃滋补闽南名菜'},{n:'花生汤',d:'花生熬至入口即化，甜糯香浓，配油条绝了'},{n:'烧肉粽',d:'糯米包五花肉咸蛋黄栗子香菇，蘸甜辣酱花生碎'}],attractions:[{n:'鼓浪屿',d:'钢琴之岛万国建筑，日光岩俯瞰全岛，小巷漫步发呆'},{n:'厦门大学',d:'中国最美大学，芙蓉隧道涂鸦墙，面朝大海'},{n:'环岛路',d:'沿海骑行看日出日落，海风吹拂惬意无比'},{n:'南普陀寺',d:'千年古刹依山面海，素斋素饼值得一尝'},{n:'曾厝垵',d:'渔村改造的文创街区，小吃民宿文艺小店'},{n:'中山路',d:'百年骑楼商业街，沙茶面海蛎煎一路吃过去'}]},
+  '乌鲁木齐':{food:[{n:'大盘鸡',d:'鸡块土豆宽面配辣皮子，新疆招牌菜，量大管饱'},{n:'烤羊肉串',d:'孜然辣椒面炭火烤制，肥瘦相间一口一串'},{n:'手抓饭',d:'羊油焖米饭配黄萝卜羊肉葡萄干，油润香甜'},{n:'馕',d:'维吾尔族主食大饼，芝麻馕皮芽子馕各种口味'},{n:'拉条子',d:'手工拉面配番茄羊肉蔬菜，筋道爽滑'},{n:'酸奶',d:'新疆手工酸奶酸到皱眉，撒砂糖拌着吃'}],attractions:[{n:'天山天池',d:'博格达峰下的高山湖泊，雪山倒影如仙境'},{n:'大巴扎',d:'世界最大巴扎，干果地毯手工艺品琳琅满目'},{n:'红山',d:'乌鲁木齐地标，登顶俯瞰全城'},{n:'南山牧场',d:'夏季草原野花盛开，骑马烧烤避暑胜地'}]},
+  '呼和浩特':{food:[{n:'手把肉',d:'白水煮大块羊肉蘸盐吃，原汁原味肉质鲜嫩'},{n:'烤全羊',d:'整只羊炭火慢烤金黄，蒙餐最高礼遇'},{n:'奶茶',d:'砖茶煮牛奶加盐加炒米，咸香浓郁蒙族每日必饮'},{n:'莜面',d:'莜麦面做成的窝窝或面条，蘸羊肉汤吃，粗粮健康'},{n:'奶皮子',d:'鲜奶煮沸后表面凝成的奶皮，奶香浓郁入口即化'}],attractions:[{n:'大召寺',d:'明代藏传佛教寺院，银佛龙雕壁画三绝'},{n:'希拉穆仁草原',d:'骑马射箭住蒙古包，烤全羊篝火晚会'},{n:'内蒙古博物院',d:'恐龙化石草原文化，了解蒙古族历史文化'},{n:'塞上老街',d:'明清古街，蒙族手工艺品皮画蒙古刀'}]},
+  '贵阳':{food:[{n:'酸汤鱼',d:'苗族红酸汤煮稻田鱼，酸辣鲜香配蘸水吃'},{n:'肠旺面',d:'猪肠猪血脆哨配鸡蛋面，红油滚烫贵州早餐之王'},{n:'丝娃娃',d:'薄饼卷各种蔬菜丝蘸酸汤吃，清爽开胃'},{n:'花溪牛肉粉',d:'牛骨熬汤配酸菜折耳根，贵州人最爱的粉'},{n:'青岩猪蹄',d:'卤制入味软糯Q弹，配辣椒蘸水啃到停不下来'}],attractions:[{n:'甲秀楼',d:'南明河上的明代楼阁，贵阳城徽标'},{n:'黔灵山',d:'城中山公园，猕猴成群与游客互动'},{n:'青岩古镇',d:'600年古镇，青石板路古城墙卤猪蹄'},{n:'黄果树瀑布',d:'亚洲最大瀑布，水帘洞穿瀑而过震撼无比'},{n:'西江千户苗寨',d:'世界最大苗寨，万家灯火夜景震撼'}]},
+  '南宁':{food:[{n:'老友粉',d:'酸笋豆豉辣椒炒猪肉煮粉，酸辣鲜香南宁人最爱'},{n:'柠檬鸭',d:'柠檬酸藠头腌制的鸭肉，开胃下饭一绝'},{n:'生榨米粉',d:'发酵米浆现榨现煮，酸香味独特配碎肉'},{n:'螺蛳粉',d:'酸笋螺蛳汤煮粉，臭香臭香的让人欲罢不能'},{n:'酸嘢',d:'各种水果蔬菜酸腌，酸甜爽脆解腻神器'}],attractions:[{n:'青秀山',d:'南宁绿肺，龙象塔俯瞰全城，热带植物园'},{n:'南湖公园',d:'城市中心的湖景公园，夜幕降临灯火璀璨'},{n:'中山路',d:'南宁最热闹的夜市，老友粉柠檬鸭吃到撑'},{n:'德天瀑布',d:'中越边境跨国大瀑布，亚洲第一世界第四'}]},
+  '天津':{food:[{n:'狗不理包子',d:'百年老字号，十八个褶，皮薄馅大汁多味鲜'},{n:'煎饼果子',d:'绿豆面摊薄打鸡蛋，夹油条或薄脆，刷面酱辣酱'},{n:'耳朵眼炸糕',d:'江米面裹豆沙馅油炸，外酥里糯，天津三绝之一'},{n:'锅巴菜',d:'绿豆面锅巴浇卤汁配麻酱辣椒油，早餐标配'},{n:'十八街麻花',d:'什锦夹馅大麻花，酥脆香甜，天津特产'},{n:'罾蹦鲤鱼',d:'活鲤鱼带鳞炸至酥脆浇糖醋汁，鳞脆肉嫩'}],attractions:[{n:'天津之眼',d:'建在海河桥上的摩天轮，夜景浪漫璀璨'},{n:'五大道',d:'2000多栋小洋楼，万国建筑博览，骑行拍照圣地'},{n:'意式风情区',d:'意大利境外保存最完整的历史街区，餐厅酒吧林立'},{n:'古文化街',d:'津味十足的仿古街，泥人张杨柳青年画老字号云集'},{n:'盘山',d:'京东第一山，乾隆帝去过32次，五峰八石'},{n:'天津博物馆',d:'馆藏丰富，了解天津百年风云的好去处'}]},
+  '石家庄':{food:[{n:'驴肉火烧',d:'保定传来的绝味，卤驴肉切碎夹酥脆火烧，人间美味'},{n:'金凤扒鸡',d:'百年老字号，整鸡先炸后卤，骨酥肉烂'},{n:'红星包子',d:'河北名点，皮薄馅大汤汁足，配小米粥绝了'},{n:'藁城宫面',d:'手工空心面，细如发丝耐煮不烂，贡品传承'},{n:'正定崩肝',d:'牛肝切丝炸制成菜，香脆可口下酒神器'}],attractions:[{n:'正定古城',d:'九楼四塔八大寺，隆兴寺倒坐观音被誉为东方美神'},{n:'西柏坡',d:'新中国从这里走来，革命圣地'},{n:'赵州桥',d:'隋代李春建造，世界最古老敞肩石拱桥'},{n:'嶂石岩',d:'太行山红色砂岩地貌，百里赤壁丹崖'},{n:'抱犊寨',d:'山顶平原有古寨，俯瞰石家庄全景'}]},
+  '太原':{food:[{n:'刀削面',d:'中厚边薄棱锋分明，形似柳叶，入口外滑内筋'},{n:'过油肉',d:'山西名菜之首，猪里脊滑油配木耳冬笋，醋香点睛'},{n:'头脑',d:'傅山发明的药膳，羊肉山药黄酒熬制，冬日滋补'},{n:'碗托',d:'荞面蒸制切条蘸醋蒜辣椒油，爽滑利口'},{n:'羊肉烧卖',d:'皮薄如纸形似石榴，羊肉馅鲜美多汁'},{n:'山西老陈醋',d:'酸香醇厚，蘸饺子拌面调凉菜样样行'}],attractions:[{n:'晋祠',d:'三千年古建筑群，圣母殿鱼沼飞梁难老泉三绝'},{n:'山西博物院',d:'晋魂主题，鸟尊等国宝云集'},{n:'双塔寺',d:'太原标志双塔，明代砖塔精美'},{n:'天龙山石窟',d:'东魏北齐石窟，佛首曾流失海外终回归'},{n:'蒙山大佛',d:'高63米的北齐大佛，世界最早大型石刻佛像'}]},
+  '沈阳':{food:[{n:'老边饺子',d:'百年老店，煸馅蒸饺皮薄馅大汁足'},{n:'李连贵熏肉大饼',d:'熏肉配酥脆大饼夹甜面酱葱丝，满口留香'},{n:'马家烧麦',d:'回民传统，皮薄馅大形如牡丹，牛肉馅鲜美'},{n:'锅包肉',d:'沈阳版金黄酥脆浇糖醋汁，外酥里嫩'},{n:'白肉血肠',d:'满族传统菜，五花白肉配血肠蘸蒜酱'},{n:'老雪花啤酒',d:'沈阳人的情怀，配烤串鸡架越喝越有'}],attractions:[{n:'沈阳故宫',d:'清初皇宫，仅次于北京故宫的完整宫殿建筑群'},{n:'张氏帅府',d:'张作霖张学良父子官邸，民国风云见证地'},{n:'北陵公园',d:'皇太极陵墓清昭陵，古松参天'},{n:'九一八纪念馆',d:'铭记历史缅怀先烈'},{n:'中街',d:'中国第一条步行街，老字号百货林立'}]},
+  '大连':{food:[{n:'海鲜',d:'海胆鲍鱼海参对虾，蒸煮刺身烧烤怎么做都鲜'},{n:'海胆饺子',d:'现开海胆包饺子，鲜甜爆汁一口一个'},{n:'焖子',d:'地瓜粉块煎至焦脆，蘸蒜酱麻酱'},{n:'海鲜烧烤',d:'各色海鲜炭火烤制，撒孜然辣椒面配啤酒'},{n:'鲅鱼饼子',d:'鲅鱼肉剁馅包玉米面饼，大连人的家常味'}],attractions:[{n:'星海广场',d:'亚洲最大城市广场，面朝大海'},{n:'老虎滩海洋公园',d:'极地馆看企鹅北极熊，海豚表演精彩'},{n:'金石滩',d:'地质奇观恐龙探海龟裂石，黄金海岸'},{n:'旅顺',d:'军港之城，日俄战争遗迹，白玉山塔'},{n:'棒棰岛',d:'国宾馆级海滩，水清沙细'}]},
+  '长春':{food:[{n:'长春蹄花丝',d:'猪蹄筋切丝酱制，Q弹有嚼劲'},{n:'人参鸡',d:'长白山鲜人参与土鸡同炖，滋补养生'},{n:'熏肉大饼',d:'熏猪肉配大饼葱丝甜面酱，满族风味'},{n:'朝鲜冷面',d:'荞麦面配冰镇牛肉汤，夏天一碗透心凉'},{n:'酱骨头',d:'棒骨酱炖入味，拿吸管吸骨髓'},{n:'查干湖鱼',d:'冬捕的大胖头鱼，铁锅炖豆腐白菜'}],attractions:[{n:'伪满皇宫',d:'末代皇帝溥仪的行宫，中西合璧建筑'},{n:'净月潭',d:'亚洲最大人工林海，四季景色各异'},{n:'长影世纪城',d:'长春电影制片厂主题公园，中国好莱坞'},{n:'南湖公园',d:'市民休闲散步划船的城市之肺'},{n:'长春世界雕塑园',d:'世界各国的雕塑作品荟萃'},{n:'长白山',d:'关东第一山，天池瀑布温泉原始森林'}]},
+  '济南':{food:[{n:'九转大肠',d:'大肠经九道工序烹制，酸甜苦辣咸五味俱全'},{n:'糖醋鲤鱼',d:'黄河鲤鱼炸至头尾翘起浇糖醋汁，形似跃龙门'},{n:'油旋',d:'层层酥脆的螺旋形烧饼，葱香浓郁'},{n:'把子肉',d:'大块五花肉酱炖，肥而不腻配米饭绝了'},{n:'甜沫',d:'小米面煮蔬菜花生豆腐皮的咸粥，济南早餐'},{n:'奶汤蒲菜',d:'大明湖蒲菜配奶白浓汤，济南独有'},{n:'草包包子',d:'百年老字号，皮薄馅大灌汤流油'}],attractions:[{n:'趵突泉',d:'天下第一泉，三股水喷涌不息'},{n:'大明湖',d:'四面荷花三面柳，一城山色半城湖'},{n:'千佛山',d:'山顶俯瞰济南全景，隋代摩崖石刻精美'},{n:'五龙潭',d:'秦琼故宅，五泉汇潭清澈见底'},{n:'芙蓉街',d:'济南老城美食街，油旋把子肉甜沫吃不停'}]},
+  '青岛':{food:[{n:'辣炒蛤蜊',d:'红岛蛤蜊配辣椒爆炒，鲜辣过瘾'},{n:'海鲜饺子',d:'鲅鱼墨鱼黄花鱼各种馅，现包现煮'},{n:'烤海蛎子',d:'炭火烤生蚝配蒜蓉粉丝，鲜美多汁'},{n:'青岛啤酒',d:'世界驰名，配上烧烤蛤蜊就是青岛夏天'},{n:'排骨米饭',d:'大块排骨配米饭，青岛人的日常快餐'},{n:'崂山菇炖鸡',d:'崂山松菇与土鸡同炖，汤鲜味美'}],attractions:[{n:'栈桥',d:'青岛地标，长桥伸入大海，海鸥飞舞'},{n:'崂山',d:'海上第一名山，道教名山，山海奇观'},{n:'八大关',d:'万国建筑别墅群，四季花开美如画'},{n:'小麦岛',d:'新晋网红打卡地，草地大海灯塔'},{n:'金沙滩',d:'亚洲第一滩，沙细如粉'},{n:'青岛啤酒博物馆',d:'百年老厂房改造，喝最新鲜的原浆啤酒'}]},
+  '郑州':{food:[{n:'烩面',d:'羊骨熬汤配宽面羊肉粉丝木耳，汤浓面筋'},{n:'胡辣汤',d:'胡椒味浓汤配油条水煎包，郑州早餐灵魂'},{n:'羊肉汤',d:'羊骨熬制白汤泡烧饼，一碗暖一天'},{n:'老蔡记蒸饺',d:'百年老店，皮薄馅大，松针垫蒸清香'},{n:'葛记焖饼',d:'坛子肉焖饼，肉烂饼软酱香浓郁'},{n:'道口烧鸡',d:'滑县名产，形如元宝色香味烂四绝'}],attractions:[{n:'少林寺',d:'天下第一名刹，功夫发源地，塔林壮观'},{n:'河南博物院',d:'贾湖骨笛妇好墓国宝云集'},{n:'嵩山',d:'五岳之中岳，少林寺中岳庙嵩阳书院'},{n:'郑东新区',d:'现代都市天际线，如意湖畔大玉米楼'},{n:'黄河风景名胜区',d:'看母亲河，炎黄二帝巨像雄伟'}]},
+  '合肥':{food:[{n:'李鸿章大杂烩',d:'海参鱼肚鸡肉等名贵食材一锅烩，官府名菜'},{n:'三河米饺',d:'米粉皮包豆腐虾米馅油炸，外酥内软'},{n:'吴山贡鹅',d:'当地大白鹅卤制，肉质鲜美'},{n:'包公鱼',d:'包河莲藕与鲫鱼同烧，红烧凉吃两种'},{n:'合肥老母鸡汤',d:'土鸡小火慢炖，汤浓味鲜滋补'},{n:'泥鳅挂面',d:'泥鳅煮挂面，河鲜浓郁家常风味'}],attractions:[{n:'逍遥津',d:'三国古战场，张辽威震逍遥津之地'},{n:'包公园',d:'纪念包拯的园林，清风阁俯瞰城景'},{n:'三河古镇',d:'小桥流水人家，徽派建筑古韵'},{n:'安徽省博物院',d:'徽州文化皖南古建筑了解安徽'},{n:'巢湖',d:'中国五大淡水湖之一，湖光山色'},{n:'李鸿章故居',d:'晚清名臣的豪宅，了解那段历史'}]},
+  '福州':{food:[{n:'佛跳墙',d:'鲍鱼海参鱼翅等十八种食材慢炖，闽菜之王'},{n:'鱼丸',d:'手打鱼浆包猪肉馅，Q弹鲜美爆汁'},{n:'肉燕',d:'猪后腿肉捶打成燕皮包馅，太平燕福州人必吃'},{n:'锅边糊',d:'米浆浇在锅边烫熟铲入海鲜汤，鲜滑爽口'},{n:'荔枝肉',d:'猪肉切花刀炸成荔枝形浇酸甜汁，酸甜酥嫩'},{n:'芋泥',d:'槟榔芋蒸熟碾泥拌猪油白糖，香甜绵密'}],attractions:[{n:'三坊七巷',d:'中国城市里坊制度活化石，明清古建筑群'},{n:'鼓山',d:'福州后花园，涌泉寺千年古刹'},{n:'西湖公园',d:'福州城中的古典园林，免费开放'},{n:'上下杭',d:'老福州商埠，民国建筑老街风情'},{n:'平潭岛',d:'大陆距台湾最近的地方，蓝眼泪奇观'}]},
+  '海口':{food:[{n:'文昌鸡',d:'海南四大名菜之首，皮爽肉滑白切蘸蒜蓉酱油'},{n:'海南粉',d:'细米粉配花生芝麻牛肉干酸菜，腌粉拌着吃'},{n:'老爸茶',d:'海口人的下午茶文化，一壶茶几盘点心聊半天'},{n:'清补凉',d:'椰奶底配绿豆红豆薏米椰肉水果，消暑圣品'},{n:'椰子饭',d:'糯米椰浆灌入椰青蒸制，椰香浓郁'},{n:'糟粕醋',d:'酿酒酒糟发酵做汤底煮海鲜，酸辣开胃'},{n:'和乐蟹',d:'万宁和乐镇的膏蟹，蟹黄饱满清蒸最鲜'}],attractions:[{n:'骑楼老街',d:'百年南洋风格建筑群，海口的历史记忆'},{n:'假日海滩',d:'市区最近的滨海浴场，椰风海韵'},{n:'万绿园',d:'千亩海滨公园，跑步散步放风筝'},{n:'海南省博物馆',d:'了解海南岛和南海历史'},{n:'冯小刚电影公社',d:'民国风情街拍电影同款照片'},{n:'观澜湖',d:'高尔夫度假区，温泉SPA'}]},
+  '兰州':{food:[{n:'兰州牛肉面',d:'一清二白三红四绿五黄，毛细二细韭叶子任选'},{n:'手抓羊肉',d:'白水煮羊肉蘸椒盐，原汁原味鲜嫩'},{n:'酿皮',d:'面粉洗出面筋蒸制，切条拌麻酱辣椒油醋'},{n:'灰豆子',d:'黑豌豆加碱熬煮，沙糯香甜'},{n:'甜醅子',d:'麦子发酵的甜饮，冰镇后酸甜可口'},{n:'热冬果',d:'冬果梨配冰糖红枣炖煮，冬天暖身'},{n:'牛奶鸡蛋醪糟',d:'牛奶鸡蛋醪糟煮一碗，夜市名小吃'}],attractions:[{n:'黄河铁桥',d:'天下黄河第一桥，百年老桥见证兰州'},{n:'白塔山',d:'山顶白塔俯瞰黄河穿城而过'},{n:'五泉山',d:'五眼清泉得名，兰州人休闲爬山处'},{n:'甘肃省博物馆',d:'马踏飞燕铜奔马，丝绸之路文物'},{n:'正宁路夜市',d:'兰州夜生活灵魂，牛奶鸡蛋醪糟走起'}]},
+  '西宁':{food:[{n:'手抓羊肉',d:'青海草膘羊白水煮蘸椒盐，肉质鲜美无膻味'},{n:'酿皮',d:'青稞面洗制蒸熟切条，拌辣椒油醋蒜'},{n:'酸奶',d:'牦牛奶发酵，表面一层黄油，撒白糖吃'},{n:'尕面片',d:'手工揪的小面片配羊肉蔬菜汤，西北日常'},{n:'羊杂碎',d:'羊头羊肚羊心一锅煮，汤浓味厚'},{n:'甜醅',d:'青稞发酵制成的甜饮，清凉解暑'},{n:'狗浇尿',d:'菜籽油烙的薄饼，金黄酥脆名奇怪味好吃'}],attractions:[{n:'塔尔寺',d:'藏传佛教格鲁派六大寺院之一，酥油花堆绣壁画三绝'},{n:'青海湖',d:'中国最大咸水湖，七月油菜花海环湖骑行绝美'},{n:'东关清真大寺',d:'西北四大清真寺之一，建筑宏伟'},{n:'茶卡盐湖',d:'天空之镜，拍照犹如行走在云端'},{n:'日月山',d:'文成公主进藏途经地，农牧分界线'}]},
+  '银川':{food:[{n:'手抓羊肉',d:'宁夏滩羊白水煮蘸椒盐蒜醋，嫩而不膻'},{n:'羊杂碎',d:'面肺羊肚羊头一锅烩，汤浓料足'},{n:'羊肉搓面',d:'手工搓的粗面条配羊肉臊子，筋道过瘾'},{n:'烩小吃',d:'夹板丸子羊肉汤烩制，回民传统小吃'},{n:'八宝茶',d:'茶叶枸杞桂圆红枣冰糖泡制，回民待客必备'},{n:'羊肉泡馍',d:'宁夏版的泡馍，汤宽肉多'},{n:'苦苦菜',d:'野生苦菜焯水凉拌，清热下火'}],attractions:[{n:'西夏王陵',d:'东方金字塔，西夏王朝九座帝王陵墓群'},{n:'镇北堡影视城',d:'大话西游拍摄地，中国一绝西部影城'},{n:'贺兰山岩画',d:'游牧民族千年岩画艺术画廊'},{n:'沙湖',d:'沙漠与湖泊共存的奇观，滑沙观鸟'},{n:'水洞沟',d:'中国最早旧石器遗址，明长城藏兵洞'},{n:'怀远夜市',d:'银川人的深夜食堂，烤肉辣糊糊'}]},
+  '南昌':{food:[{n:'南昌拌粉',d:'米粉拌酱油辣椒萝卜干花生碎，南昌早餐灵魂'},{n:'瓦罐汤',d:'小瓦罐慢炖的排骨汤乌鸡汤老鸭汤，鲜掉眉毛'},{n:'藜蒿炒腊肉',d:'鄱阳湖藜蒿配腊肉爆炒，咸香脆嫩'},{n:'米粉蒸肉',d:'五花肉裹米粉蒸至酥烂，肥而不腻'},{n:'鄱阳湖胖鱼头',d:'大胖鱼头剁椒蒸或炖汤，鲜辣嫩滑'},{n:'白糖糕',d:'糯米粉油炸裹糖霜，外酥里糯甜甜蜜蜜'}],attractions:[{n:'滕王阁',d:'落霞与孤鹜齐飞秋水共长天一色，江南三大名楼'},{n:'八一南昌起义纪念馆',d:'军旗升起的地方，红色记忆'},{n:'绳金塔',d:'南昌现存最古老建筑，千年古塔'},{n:'梅岭',d:'南昌后花园，洗肺胜地'},{n:'万寿宫',d:'许真君道场，赣商文化中心'}]},
+  '宁波':{food:[{n:'宁波汤圆',d:'猪油黑芝麻馅，皮薄馅大甜而不腻'},{n:'红膏炝蟹',d:'生腌梭子蟹，蟹膏鲜红蟹肉晶莹，宁波人过年必备'},{n:'雪菜大黄鱼',d:'雪里蕻咸菜煮大黄鱼，咸鲜至极'},{n:'海鲜面',d:'黄鱼虾蟹各种海鲜煮面，一碗尝遍东海'},{n:'油赞子',d:'炸麻花裹海苔粉，咸甜两种口味'},{n:'年糕',d:'宁波水磨年糕柔滑软糯，炒煮汤都好吃'}],attractions:[{n:'天一阁',d:'中国现存最古老的私家藏书楼，书藏古今'},{n:'老外滩',d:'比上海外滩还早，酒吧餐厅风情街'},{n:'东钱湖',d:'浙江最大天然淡水湖，骑行环湖'},{n:'普陀山',d:'海天佛国，观音道场'},{n:'溪口雪窦山',d:'蒋介石故里，弥勒佛道场'},{n:'象山影视城',d:'琅琊榜三生三世拍摄地'}]},
+  '无锡':{food:[{n:'酱排骨',d:'三凤桥排骨，甜咸适中骨酥肉烂，无锡名片'},{n:'太湖三白',d:'白鱼白虾银鱼，太湖鲜味的极致'},{n:'油面筋',d:'清水油面筋塞肉红烧，一口一个'},{n:'小笼包',d:'无锡版小笼甜味重，皮薄汤多肉馅大'},{n:'镜箱豆腐',d:'豆腐挖空填肉馅红烧，形似古时女子镜箱'},{n:'太湖船菜',d:'坐船游太湖边品湖鲜，江南风雅'},{n:'惠山油酥',d:'芝麻酥饼，香甜酥脆无锡名点'}],attractions:[{n:'鼋头渚',d:'太湖佳绝处，三月樱花如雪世界三大赏樱地'},{n:'灵山大佛',d:'88米青铜大佛，九龙灌浴天下奇观'},{n:'惠山古镇',d:'二泉映月诞生地，寄畅园江南名园'},{n:'清名桥古运河',d:'江南水弄堂，运河绝版地'},{n:'拈花湾',d:'禅意小镇，日式庭园大唐风韵'},{n:'三国水浒城',d:'央广影视基地，重返三国水浒时代'}]},
+  '温州':{food:[{n:'温州鱼丸',d:'鮸鱼肉打成浆挤成条状煮汤，Q弹鲜美'},{n:'灯盏糕',d:'米浆萝卜丝肉馅油炸至金黄，形似古灯盏'},{n:'猪脏粉',d:'猪肠猪血米粉煮一碗，重口味爱好者的爱'},{n:'炒粉干',d:'细粉干大火爆炒配海鲜蔬菜，锅气十足'},{n:'永嘉麦饼',d:'五花肉梅干菜做馅烤制，满口留香'},{n:'敲鱼汤',d:'鱼肉敲成薄片切丝煮汤，透亮爽滑'},{n:'江蟹生',d:'活江蟹生腌，鲜美无比温州人至爱'}],attractions:[{n:'雁荡山',d:'东南第一山，灵峰夜景夫妻峰堪称一绝'},{n:'楠溪江',d:'三百里楠溪江，古村落星罗棋布山水如画'},{n:'江心屿',d:'瓯江中的孤屿，中国四大孤屿之一'},{n:'五马街',d:'温州第一街，百年老店时尚商铺'},{n:'南麂列岛',d:'贝藻王国碧海蓝天，中国最美海岛之一'}]},
+  '珠海':{food:[{n:'海鲜',d:'横琴岛生蚝，白灼椒盐炭烤样样鲜'},{n:'斗门重壳蟹',d:'软壳硬壳之间最肥美，清蒸最鲜'},{n:'横琴生蚝',d:'个大多汁，碳烤蒜蓉蒸都绝'},{n:'钵仔糕',d:'米浆蒸制的小甜品，软糯Q弹'},{n:'唐家湾茶果',d:'客家传统点心，各种馅料'},{n:'南屏脆肉鲩',d:'脆肉鲩鱼片火锅，弹牙爽脆'}],attractions:[{n:'长隆海洋王国',d:'世界顶级海洋主题公园，鲸鲨馆全球最大'},{n:'情侣路',d:'28公里滨海大道，珠海渔女雕像'},{n:'外伶仃岛',d:'文天祥过伶仃洋之地，海岛度假胜地'},{n:'圆明新园',d:'按圆明园原貌复建的园林景区'},{n:'日月贝',d:'珠海大剧院，日月双贝造型地标'},{n:'东澳岛',d:'碧海银沙，潜水海钓好去处'}]},
+  '佛山':{food:[{n:'双皮奶',d:'顺德水牛奶蒸制，双层奶皮入口即化'},{n:'佛山扎蹄',d:'猪蹄去骨填入猪颈肉卤制，百年技艺'},{n:'柱侯鸡',d:'佛山柱侯酱焖鸡，浓香入味'},{n:'顺德鱼生',d:'鲜鱼片薄如蝉翼，配姜丝柠檬草花生碎'},{n:'均安蒸猪',d:'整猪大蒸笼蒸制，皮脆肉嫩'},{n:'盲公饼',d:'佛山传统名点，花生芝麻香酥'},{n:'大良蹦砂',d:'面粉猪油炸制的蝴蝶形点心'}],attractions:[{n:'佛山祖庙',d:'北宋古庙，岭南建筑瑰宝，黄飞鸿纪念馆'},{n:'南风古灶',d:'500年从未断火的龙窑，陶瓷活化石'},{n:'清晖园',d:'广东四大名园，岭南园林典范'},{n:'西樵山',d:'南粤名山，南海观音坐像庄严'},{n:'岭南天地',d:'古建筑群改造的时尚街区，吃逛一体'},{n:'千灯湖',d:'人工湖夜景璀璨，市民休闲好去处'}]},
+  '泉州':{food:[{n:'面线糊',d:'细面线海鲜熬汤，配油条醋肉，泉州早餐之王'},{n:'土笋冻',d:'星虫熬制凝成冻，蘸蒜蓉酱油芥末'},{n:'烧肉粽',d:'五花肉咸蛋黄栗子香菇包粽，蘸甜辣酱'},{n:'牛肉羹',d:'牛肉切薄片裹薯粉滑入姜丝清汤'},{n:'姜母鸭',d:'老姜麻油炖番鸭，闽南名菜'},{n:'海蛎煎',d:'鲜海蛎配地瓜粉鸡蛋煎至金黄'},{n:'石花膏',d:'海石花熬制成的透明果冻，夏日消暑'}],attractions:[{n:'开元寺',d:'唐代古刹，东西双塔是泉州标志'},{n:'清源山',d:'老君岩天下第一老子像'},{n:'蟳埔村',d:'簪花围蟳埔女，蚵壳厝建筑奇特'},{n:'关帝庙',d:'香火鼎盛建筑精美，闽南信仰中心'},{n:'西街',d:'千年老街，面线糊土笋冻一路吃到饱'},{n:'崇武古城',d:'明代石砌卫城，海滨风光'}]},
+  '烟台':{food:[{n:'烟台焖子',d:'地瓜淀粉制成的小块油煎，蘸蒜酱麻酱'},{n:'海鲜',d:'海参鲍鱼对虾海胆，渤海湾的鲜味'},{n:'蓬莱小面',d:'细如发丝的拉面配海鲜卤汁'},{n:'福山拉面',d:'手工拉面筋道弹牙配海鲜臊子'},{n:'胶东大饽饽',d:'脸盆大的发面馒头，麦香浓郁'},{n:'葱烧海参',d:'大葱与海参同烧，葱香酱浓'},{n:'烟台苹果',d:'栖霞苹果脆甜多汁，烟台名片'}],attractions:[{n:'蓬莱阁',d:'八仙过海传说之地，海市蜃楼名扬天下'},{n:'长岛',d:'海上仙山，九丈崖月牙湾绝美'},{n:'烟台山',d:'各国领事馆旧址，俯瞰烟台港'},{n:'养马岛',d:'秦始皇养马之地，环岛公路绝美'},{n:'牟氏庄园',d:'北方最大地主庄园，了解胶东历史'},{n:'张裕酒文化博物馆',d:'中国葡萄酒工业发源地，品酒体验'}]},
+  '桂林':{food:[{n:'桂林米粉',d:'卤水米粉配锅烧牛肉酸豆角，先干捞后加汤'},{n:'啤酒鱼',d:'漓江鲜鱼配番茄青椒啤酒炖煮，鲜香微辣'},{n:'田螺酿',d:'田螺肉剁碎与猪肉薄荷回填螺壳，味道一绝'},{n:'荔浦芋扣肉',d:'荔浦芋头与五花肉夹蒸，芋香肉烂'},{n:'油茶',d:'茶叶姜蒜捶打煮开配炒米花生，恭城特色'},{n:'马蹄糕',d:'桂林马蹄磨浆蒸制，清甜脆爽'},{n:'水糍粑',d:'糯米糍粑裹芝麻花生馅，软糯香甜'}],attractions:[{n:'漓江',d:'百里漓江百里画廊，桂林山水甲天下'},{n:'阳朔西街',d:'中西合璧的千年老街，背包客天堂'},{n:'象鼻山',d:'桂林城徽，山形似大象饮水漓江'},{n:'龙脊梯田',d:'世界梯田之冠，四季景色各异'},{n:'两江四湖',d:'乘船夜游桂林城，灯火璀璨'},{n:'银子岩',d:'世界溶洞奇观，钟乳石晶莹剔透'},{n:'十里画廊',d:'骑行遇龙河畔，山水田园画卷'}]},
+  '秦皇岛':{food:[{n:'海鲜',d:'螃蟹皮皮虾扇贝海螺，渤海湾的鲜'},{n:'炸肉',d:'里脊切片炸制，外酥里嫩当零食'},{n:'四条包子',d:'山海关百年老店，猪肉大葱馅'},{n:'海鲜饺子',d:'鲅鱼馅皮皮虾馅各种海鲜包入饺子'},{n:'烤大虾',d:'渤海对虾炭火烤制，原味鲜甜'},{n:'老二位麻酱烧饼',d:'层层酥脆芝麻酱香'}],attractions:[{n:'山海关',d:'天下第一关，明长城东部起点'},{n:'北戴河',d:'中国四大避暑胜地，碧海金沙'},{n:'鸽子窝公园',d:'看日出观鸟的绝佳之地'},{n:'老龙头',d:'长城入海处，万里长城唯一与大海交汇'},{n:'秦皇求仙入海处',d:'秦始皇东巡求仙的历史遗迹'},{n:'阿那亚',d:'孤独图书馆海边教堂，网红打卡地'}]},
+  '洛阳':{food:[{n:'洛阳水席',d:'24道菜汤汤水水酸辣咸甜，千年宫廷宴'},{n:'牛肉汤',d:'牛骨熬汤泡饼丝，清晨一碗神清气爽'},{n:'浆面条',d:'绿豆浆发酵煮面，酸香独特洛阳独有'},{n:'烫面角',d:'烫面皮包馅蒸饺，皮薄馅大'},{n:'牡丹燕菜',d:'萝卜切丝做成牡丹形，国宴级菜品'},{n:'不翻汤',d:'绿豆面糊不翻面烙饼泡汤，夜市名吃'},{n:'银条',d:'偃师银条菜凉拌，清脆爽口'}],attractions:[{n:'龙门石窟',d:'世界文化遗产，十万尊佛像震撼人心'},{n:'白马寺',d:'中国第一古刹，佛教传入中国的源头'},{n:'洛阳博物馆',d:'十三朝古都的文物宝藏'},{n:'关林',d:'关羽首级埋葬地，香火鼎盛'},{n:'洛邑古城',d:'文峰塔下仿古街区，汉服拍照圣地'},{n:'老城十字街',d:'洛阳小吃集中地，水席牛肉汤吃到撑'},{n:'牡丹花会',d:'每年四月花开时节动京城'}]},
+  '开封':{food:[{n:'灌汤包',d:'皮薄如纸提如灯笼，先开窗后喝汤'},{n:'鲤鱼焙面',d:'黄河鲤鱼糖醋汁浇龙须面，酸甜酥脆'},{n:'套四宝',d:'鸭套鸡套鸽套鹌鹑，层层惊喜'},{n:'炒凉粉',d:'绿豆凉粉切块蒜蓉辣椒翻炒，夜市之王'},{n:'红薯泥',d:'红薯蒸熟碾泥拌白糖猪油，甜糯至极'},{n:'桶子鸡',d:'整鸡卤制咸香嫩滑，马豫兴百年老号'},{n:'杏仁茶',d:'宫廷传承甜品，杏仁粉藕粉冲泡'}],attractions:[{n:'清明上河园',d:'按清明上河图1:1复建，宋文化沉浸体验'},{n:'大相国寺',d:'中国著名佛教寺院，鲁智深倒拔垂杨柳处'},{n:'龙亭',d:'六朝皇宫遗址，潘杨二湖相映'},{n:'开封府',d:'包青天办公地，了解北宋司法文化'},{n:'铁塔',d:'900年琉璃砖塔，开封最古老建筑'}]},
+  '大理':{food:[{n:'砂锅鱼',d:'洱海鲤鱼配火腿豆腐在砂锅慢炖，汤白味鲜'},{n:'烤饵块',d:'大米制成的饵块炭火烤至外焦里糯，甜咸两种'},{n:'凉鸡米线',d:'凉拌鸡肉丝配酸辣米线，夏日清爽'},{n:'喜洲粑粑',d:'破酥面饼在炭火炉烤制，甜咸两种馅'},{n:'乳扇',d:'牛奶制成的薄片炸着吃蘸糖或烤着吃'},{n:'大理生皮',d:'猪皮烧制切条蘸酸辣蘸水吃'},{n:'鲜花饼',d:'玫瑰花瓣入馅烤制，花香味十足'}],attractions:[{n:'洱海',d:'高原明珠，骑行环海看苍山倒影'},{n:'大理古城',d:'南诏国都城，人民路洋人街慢生活'},{n:'苍山',d:'十九峰十八溪，洗马潭索道上雪山'},{n:'双廊',d:'洱海边最美渔村，杨丽萍太阳宫'},{n:'崇圣寺三塔',d:'千年三塔倒影水中，大理地标'},{n:'喜洲古镇',d:'白族民居建筑群，喜洲粑粑发源地'},{n:'沙溪古镇',d:'茶马古道唯一幸存集市，时光凝固'}]},
+  '丽江':{food:[{n:'腊排骨火锅',d:'风干的腊排骨煮火锅，越煮越香'},{n:'鸡豆凉粉',d:'丽江特有的鸡豆做凉粉，煎着吃凉拌都行'},{n:'纳西烤鱼',d:'本地鱼炭火烤制配纳西香料'},{n:'丽江粑粑',d:'高原麦面做的馅饼，甜咸两种'},{n:'水性杨花',d:'泸沽湖生长的水草，炒着吃滑嫩清爽'},{n:'黑山羊火锅',d:'丽江本地黑山羊肉煮火锅，暖身滋补'},{n:'米灌肠',d:'猪血糯米灌入猪肠蒸制，纳西族传统'}],attractions:[{n:'丽江古城',d:'世界文化遗产，小桥流水纳西风情'},{n:'玉龙雪山',d:'纳西族神山，冰川公园蓝月谷'},{n:'束河古镇',d:'比大研更安静的古镇，马帮文化'},{n:'泸沽湖',d:'女儿国摩梭人的家园，水性杨花盛开'},{n:'虎跳峡',d:'世界上最深的峡谷之一，金沙江咆哮'},{n:'拉市海',d:'高原湿地，骑马划船看候鸟'}]},
+  '张家界':{food:[{n:'三下锅',d:'肥肠猪肚核桃肉三种食材一锅煮，越吃越过瘾'},{n:'土家腊肉',d:'土家族传统烟熏腊肉，蒸炒炖都香'},{n:'血豆腐',d:'猪血与豆腐混合制成，可以炒可以蒸'},{n:'酸萝卜',d:'萝卜泡酸，解腻开胃'},{n:'蕨粑',d:'蕨根粉做的粑粑，炒腊肉一绝'},{n:'土家扣肉',d:'五花肉炸后切片蒸制，肥而不腻'}],attractions:[{n:'张家界国家森林公园',d:'阿凡达取景地，三千奇峰拔地而起'},{n:'天门山',d:'天门洞开，99道弯通天大道'},{n:'大峡谷',d:'玻璃桥横跨峡谷，步步惊心'},{n:'黄龙洞',d:'世界溶洞奇观，地下河泛舟'},{n:'宝峰湖',d:'高山湖泊，泛舟听土家山歌'},{n:'凤凰古城',d:'沈从文笔下的边城，沱江吊脚楼'}]},
+  '黄山':{food:[{n:'臭鳜鱼',d:'鳜鱼发酵后再烧，闻着臭吃着鲜嫩'},{n:'毛豆腐',d:'豆腐发酵长白毛后油煎，蘸辣椒酱'},{n:'黄山烧饼',d:'梅干菜肉馅烤制的小烧饼，酥脆咸香'},{n:'刀板香',d:'腌制的猪肉切薄片蒸熟，咸香下饭'},{n:'石耳炖鸡',d:'黄山石耳与土鸡同炖，山珍鲜美'},{n:'问政山笋',d:'徽州问政山的嫩笋，清炒煲汤都鲜'},{n:'徽州一品锅',d:'层层叠放的各种食材炖于一锅'}],attractions:[{n:'黄山',d:'五岳归来不看山黄山归来不看岳，奇松怪石云海'},{n:'宏村',d:'画里乡村，月沼南湖牛形水系'},{n:'西递',d:'桃花源里人家，徽派明清古民居'},{n:'屯溪老街',d:'活动着的清明上河图'},{n:'呈坎',d:'八卦村，中国风水第一村'},{n:'齐云山',d:'道教四大名山之一，丹霞地貌'}]},
+  '香港':{food:[{n:'港式奶茶',d:'锡兰红茶配淡奶，丝滑浓郁'},{n:'烧鹅',d:'深井烧鹅皮脆肉嫩，蘸酸梅酱'},{n:'云吞面',d:'鲜虾云吞配竹升面大地鱼汤'},{n:'菠萝包',d:'酥皮菠萝包夹冰黄油，港式下午茶'},{n:'煲仔饭',d:'砂锅煮饭配腊味排骨，锅巴焦香'},{n:'蛋挞',d:'酥皮蛋挞奶香蛋香入口即化'},{n:'杨枝甘露',d:'芒果西柚椰奶西米露，经典港式甜品'}],attractions:[{n:'维多利亚港',d:'世界三大夜景之一，幻彩咏香江灯光秀'},{n:'太平山顶',d:'俯瞰维港天际线，夜景绝美'},{n:'迪士尼乐园',d:'全球最小迪士尼，但依然梦幻精彩'},{n:'海洋公园',d:'看海洋动物坐过山车，老少皆宜'},{n:'旺角',d:'购物天堂，女人街波鞋街庙街夜市'},{n:'天星小轮',d:'百年渡轮横渡维港，最便宜的维港游'}]},
+  '澳门':{food:[{n:'葡式蛋挞',d:'安德鲁和玛嘉烈两家争奇斗艳，外酥内滑'},{n:'猪扒包',d:'煎猪排夹在脆皮面包里，大利来记最出名'},{n:'水蟹粥',d:'膏蟹水蟹肉蟹三种蟹熬粥，鲜美无比'},{n:'马介休',d:'葡式咸鳕鱼，可以炸球可以炒饭'},{n:'木糠布丁',d:'奶油饼干碎层层叠加，入口即融'},{n:'葡国鸡',d:'葡式咖喱鸡配饭，椰香浓郁'},{n:'杏仁饼',d:'钜记咀香园，手工制杏仁饼细腻香酥'}],attractions:[{n:'大三巴牌坊',d:'圣保禄教堂前壁遗迹，澳门标志'},{n:'威尼斯人',d:'室内大运河贡多拉，购物博彩综合度假村'},{n:'澳门塔',d:'338米观光塔，勇敢者挑战蹦极'},{n:'官也街',d:'氹仔美食街，猪扒包水蟹粥吃到撑'},{n:'路环岛',d:'澳门最安静的一角，安德鲁蛋挞发源地'},{n:'议事亭前地',d:'葡式建筑群，世界文化遗产'},{n:'龙环葡韵',d:'葡式住宅博物馆，了解澳门葡国文化'}]},
+  '唐山':{food:[{n:'棋子烧饼',d:'形似棋子巴掌大，猪肉大葱馅层层酥脆'},{n:'蜂蜜麻糖',d:'薄如蝉翼的糖片层层叠加，甜而不腻'},{n:'刘美烧鸡',d:'百年老号，色泽红亮肉烂脱骨'},{n:'迁西板栗',d:'燕山板栗香甜软糯，糖炒栗子天下闻名'},{n:'唐山懒豆腐',d:'介于豆腐脑和豆腐之间的嫩滑口感'},{n:'万里香扒鸡',d:'先炸后卤骨酥肉烂回味无穷'}],attractions:[{n:'清东陵',d:'世界文化遗产，顺治康熙乾隆慈禧陵寝'},{n:'南湖公园',d:'曾经的采煤塌陷区，变身城市生态氧吧'},{n:'滦州古城',d:'三千年历史的古城复建，北方水乡风情'},{n:'唐山抗震纪念馆',d:'1976年大地震记忆，了解这座英雄城市的重生'}]},
+  '邯郸':{food:[{n:'驴肉香肠',d:'永年驴肉灌制香肠，切片即食咸香Q弹'},{n:'二毛烧鸡',d:'百年传承，色泽金黄皮脆肉嫩'},{n:'马头酥鱼',d:'滏阳河鲫鱼炸至骨酥肉烂，连骨带刺都能吃'},{n:'武安拽面',d:'手工拉制的宽面，筋道弹牙配羊肉卤'},{n:'郭八火烧',d:'芝麻烧饼夹驴肉，香酥可口'},{n:'五百居香肠',d:'大名府特产，咸甜适口切片下酒绝佳'}],attractions:[{n:'娲皇宫',d:'悬于悬崖峭壁上的女娲庙，建筑奇观'},{n:'丛台公园',d:'赵武灵王阅兵之地，邯郸历史的缩影'},{n:'响堂山石窟',d:'北齐皇家石窟，雕刻精美'},{n:'京娘湖',d:'赵匡胤千里送京娘传说，山水峡谷风光'}]},
+  '保定':{food:[{n:'驴肉火烧',d:'保定派代表，卤驴肉剁碎夹圆火烧，天上龙肉地上驴肉'},{n:'白运章包子',d:'百年包子铺，皮薄馅大汁多'},{n:'大慈阁素面',d:'寺院传承的素斋面，汤清味鲜'},{n:'糖葫芦王',d:'冰糖葫芦的升级版，各种水果裹糖衣'},{n:'白肉罩火烧',d:'五花白肉配烧饼，保定的传统吃法'},{n:'牛肉罩饼',d:'牛肉汤泡饼，保定人早餐最爱'}],attractions:[{n:'清西陵',d:'雍正嘉庆道光光绪四位皇帝的陵寝'},{n:'白洋淀',d:'华北之肾，夏季荷花盛开芦苇荡漾'},{n:'古莲花池',d:'清代皇家行宫园林，荷花满池'},{n:'狼牙山',d:'五壮士跳崖之地，红色旅游经典'},{n:'直隶总督署',d:'清代封疆大吏的办公地，保存完好'}]},
+  '邢台':{food:[{n:'邢台锅贴',d:'底脆皮薄馅大多汁，猪肉韭菜最地道'},{n:'临城酥鱼',d:'鱼骨都酥软的酱焖小鱼'},{n:'任县老炒肉',d:'大火爆炒五花肉配大葱，锅气十足'},{n:'浆水豆腐',d:'太行山泉水做的豆腐，细腻嫩滑'},{n:'威县火烧',d:'老面发酵层层起酥，空口吃都香'}],attractions:[{n:'崆山白云洞',d:'北方最大的溶洞群，钟乳石奇观'},{n:'邢台大峡谷',d:'太行山深处的峡谷群，山势险峻'},{n:'开元寺',d:'唐代古寺，古塔风铃幽静'},{n:'扁鹊庙',d:'神医扁鹊的祭祀地，中医文化圣地'}]},
+  '张家口':{food:[{n:'柴沟堡熏肉',d:'柏木熏制的五花肉，肥而不腻烟香浓郁'},{n:'蔚县八大碗',d:'八道菜组成的宴席，丝子杂烩红烧肉虎皮丸子等'},{n:'口蘑',d:'坝上草原野生的白蘑菇，煮汤炒菜提鲜'},{n:'莜面窝窝',d:'莜麦面做成蜂窝状蒸制，蘸羊肉蘑菇汤'},{n:'怀安豆腐皮',d:'薄如纸的豆腐皮，凉拌炒着都好吃'},{n:'宣化牛奶葡萄',d:'皮薄肉脆汁多，国家地理标志产品'}],attractions:[{n:'草原天路',d:'中国的66号公路，草原风车梯田美如画'},{n:'张北草原',d:'坝上草原音乐节，夏季避暑骑马'},{n:'崇礼滑雪',d:'冬奥会举办地，国内顶级滑雪胜地'},{n:'大境门',d:'万里长城四大关口之一，大好河山题刻'},{n:'蔚县古城',d:'明清古堡保存完好，打树花非遗绝技'}]},
+  '承德':{food:[{n:'承德凉粉',d:'绿豆淀粉做的凉粉，夏天配辣椒油醋解暑'},{n:'碗坨',d:'荞麦面制成的小碗状主食，蘸卤汁吃'},{n:'坝上烤全羊',d:'草原羔羊整只烤制，外焦里嫩'},{n:'御土荷叶鸡',d:'荷叶包裹土鸡烤制，清香肉嫩'},{n:'平泉羊汤',d:'羊骨熬制奶白汤泡烧饼'},{n:'丰宁黄油饼',d:'黄油和面烙制的酥饼，坝上特色'},{n:'承德杏仁露',d:'当地杏仁磨浆制成的饮品'}],attractions:[{n:'避暑山庄',d:'清代皇家夏宫，中国最大皇家园林'},{n:'外八庙',d:'环绕避暑山庄的藏传佛教寺庙群'},{n:'木兰围场',d:'皇家猎苑，秋天层林尽染'},{n:'棒槌山',d:'磬锤峰独立山巅，承德地标'},{n:'坝上草原',d:'夏季野花遍地，骑马拍照草原日落'}]},
+  '沧州':{food:[{n:'沧州火锅鸡',d:'铜锅炭火涮鸡肉蘸蒜蓉麻酱，沧州一绝'},{n:'河间驴肉火烧',d:'方形酥脆火烧夹卤驴肉，驴肉火烧的江湖传说'},{n:'黄骅海鲜',d:'渤海湾的对虾螃蟹皮皮虾，个大味鲜'},{n:'东光羊肠汤',d:'羊小肠煮汤配大饼，重口味爱好者的爱'},{n:'泊头鸭梨',d:'皮薄肉脆汁多，中国鸭梨之乡'},{n:'献县扒鸡',d:'百年技艺，脱骨酥烂咸香'}],attractions:[{n:'吴桥杂技大世界',d:'中国杂技之乡，精彩绝伦的杂技表演'},{n:'沧州铁狮子',d:'千年镇海吼铁铸雄狮，沧州City标志'},{n:'大运河',d:'京杭大运河穿城而过，千年水运文化'},{n:'南大港湿地',d:'候鸟迁徙驿站，芦苇荡观鸟'},{n:'东光铁佛寺',d:'千年古刹，大铁佛庄严肃穆'}]},
+  '廊坊':{food:[{n:'大城驴肉',d:'卤驴肉色泽红润肉质鲜嫩，大城特色'},{n:'胜芳蟹',d:'东淀大闸蟹，蟹黄饱满秋天一绝'},{n:'固安炉糕',d:'小米面摊的小圆饼，软糯香甜'},{n:'三河豆片',d:'薄如蝉翼的豆皮，凉拌热炒均可'},{n:'香河肉饼',d:'皮薄如纸肉馅流油，京东名吃'}],attractions:[{n:'天下第一城',d:'仿明清北京城按1:1比例建造'},{n:'胜芳古镇',d:'北方水乡，廊桥戏台古建筑'},{n:'香河家具城',d:'中国北方最大的家具集散中心'},{n:'梦东方未来世界',d:'航天主题乐园，适合亲子游玩'}]},
+  '衡水':{food:[{n:'衡水湖全鱼宴',d:'衡水湖的鲜鱼做成各种菜肴，鱼头汤鲜掉眉毛'},{n:'鞋底烧饼',d:'形似鞋底的椭圆形烧饼，酥脆咸香'},{n:'老白干酒',d:'衡水老白干高度白酒，醇厚不上头'},{n:'故城龙须凤尾贡面',d:'手工空心面细如发丝，宫廷贡品传承'},{n:'枣强熏肉',d:'柏木锯末熏制，烟熏味浓肉质软烂'},{n:'武邑扣碗',d:'蒸碗菜，酥肉丸子黄焖鸡，过年必备'}],attractions:[{n:'衡水湖',d:'华北平原最大淡水湖，观鸟赏荷'},{n:'武强年画博物馆',d:'中国四大年画之一，非遗传承'},{n:'冀州古城',d:'九州之首，千年古城遗址'},{n:'景州塔',d:'北魏古塔，衡水最古老建筑'}]},
+  '大同':{food:[{n:'刀削面',d:'山西面食之王，柳叶形面条外滑内筋'},{n:'浑源凉粉',d:'蚕豆淀粉做的凉粉，配兰花豆豆腐干辣椒油'},{n:'大同羊杂',d:'羊杂碎粉条一锅煮，冬天暖身'},{n:'黄糕',d:'大黄米蒸制的黏糕，蘸羊肉汤吃'},{n:'兔头',d:'大同人爱啃兔头，麻辣五香各有风味'},{n:'大同铜火锅',d:'铜锅炭火涮羊肉烧肉丸子，什锦火锅'},{n:'莜面栲栳栳',d:'莜麦面卷成小筒状蒸制，蘸羊肉臊子'}],attractions:[{n:'云冈石窟',d:'世界文化遗产，北魏皇家雕刻45个洞窟五万尊佛像'},{n:'悬空寺',d:'悬崖峭壁上的千年古寺，李白题壮观二字'},{n:'华严寺',d:'辽代皇家寺庙，薄伽教藏殿精美绝伦'},{n:'九龙壁',d:'中国现存最早最大的琉璃九龙壁'},{n:'恒山',d:'五岳之北岳，道教名山'},{n:'大同古城墙',d:'明代修复的古城墙，夜景璀璨'}]},
+  '阳泉':{food:[{n:'平定过油肉',d:'山西名菜阳泉版，猪里脊滑油配木耳蒜薹'},{n:'飘抿曲',d:'豌豆面做的小蝌蚪状面食，爽滑利口'},{n:'粉条豆腐丝',d:'粉条与炸豆腐丝烩制，阳泉街头小吃'},{n:'盂县核桃',d:'个大皮薄仁饱满，全国闻名'},{n:'阳泉压饼',d:'薄如纸的烙饼，酥脆可当零食'},{n:'娘子关脆饼',d:'薄脆饼夹芝麻，香酥可口'}],attractions:[{n:'娘子关',d:'天下第九关，瀑布穿关而下，北方罕见'},{n:'藏山',d:'赵氏孤儿藏身地，忠义文化圣地'},{n:'翠枫山',d:'天然氧吧，春季山花烂漫'},{n:'大汖温泉',d:'深山地热温泉，冬天泡汤绝佳'}]},
+  '长治':{food:[{n:'长子炒饼',d:'细饼丝配猪肉豆芽爆炒，锅气十足'},{n:'壶关羊汤',d:'羊骨熬汤配羊肉羊杂，冬天暖身'},{n:'长治腊驴肉',d:'长治特产驴肉，肉质紧实咸香'},{n:'酥火烧',d:'层层起酥的芝麻烧饼'},{n:'上党腊味',d:'腊肉腊肠腊排骨，太行山风味'},{n:'潞城甩饼',d:'手甩的薄饼卷驴肉吃'}],attractions:[{n:'太行山大峡谷',d:'八泉峡青龙峡红豆峡，山水奇绝'},{n:'天台山',d:'女娲补天传说地，丹霞地貌'},{n:'上党门',d:'明代府衙大门，长治古城的标志'},{n:'观音堂',d:'明代悬塑满堂，五百罗汉栩栩如生'}]},
+  '晋城':{food:[{n:'晋城过油肉',d:'猪里脊配木耳黄花菜，大米的最佳搭档'},{n:'高平十大碗',d:'十道蒸碗菜组成的宴席，荤素搭配'},{n:'阳城烧肝',d:'猪肝切条炸制，外酥里嫩下酒神器'},{n:'巴公烧大葱',d:'大葱对半剖开煎至焦香，意想不到的美味'},{n:'炒凉粉',d:'绿豆凉粉切块蒜蓉翻炒，夜市之王'},{n:'陵川小米',d:'太行山小米金黄粒小，熬粥出油'}],attractions:[{n:'皇城相府',d:'康熙帝师陈廷敬故居，城堡式官宅建筑群'},{n:'王莽岭',d:'太行山最高处，云海日出奇峰怪石'},{n:'郭峪古城',d:'保存完好的明代古堡村落'},{n:'珏山',d:'双峰对峙形似玉珏，道教名山'},{n:'蟒河',d:'太行山中的原始森林，猕猴成群'}]},
+  '鄂尔多斯':{food:[{n:'烤全羊',d:'蒙古族最高礼遇，炭火慢烤金黄酥脆'},{n:'手把肉',d:'白水煮大块羊肉蘸盐吃，原味最香'},{n:'沙葱包子',d:'沙漠里长的野葱做馅，鲜香味独特'},{n:'酸烩菜',d:'酸白菜烩土豆粉条五花肉，开胃下饭'},{n:'羊肉粥',d:'羊肉丁与小米慢熬，冬天的暖心粥'},{n:'奶皮子',d:'鲜奶熬煮后表面凝皮，奶香浓郁'}],attractions:[{n:'响沙湾',d:'沙漠中的奇幻世界，滑沙听沙子唱歌'},{n:'成吉思汗陵',d:'一代天骄的衣冠冢，蒙古族圣地'},{n:'鄂尔多斯草原',d:'骑马射箭住蒙古包，草原星空'},{n:'康巴什',d:'现代化的草原新城，博物馆建筑群'},{n:'七星湖',d:'库布其沙漠中的七颗明珠'}]},
+  '包头':{food:[{n:'小肥羊火锅',d:'源自包头的火锅品牌，不蘸小料涮羊肉'},{n:'手扒羊肉',d:'大块羊肉手抓着吃蘸韭花酱'},{n:'烤羊排',d:'外焦里嫩孜然飘香，配啤酒一绝'},{n:'莜面',d:'莜麦面窝窝蘸羊肉汤，草原主食'},{n:'奶茶',d:'砖茶煮牛奶加盐加炒米，咸香浓郁'},{n:'稍麦',d:'皮薄如纸的羊肉大葱烧卖'}],attractions:[{n:'五当召',d:'内蒙古最大藏传佛教寺院，小布达拉宫'},{n:'希拉穆仁草原',d:'骑马射箭看那达慕，体验蒙古风情'},{n:'北方兵器城',d:'坦克大炮飞机展示，军迷天堂'},{n:'赛汗塔拉',d:'城中草原，国内唯一的城市草原'},{n:'梅力更',d:'山泉瀑布森林，天然避暑胜地'}]},
+  '赤峰':{food:[{n:'对夹',d:'赤峰版的肉夹馍，酥皮小饼夹熏肉'},{n:'敖汉拨面',d:'荞麦面拨成的面条，配酸菜卤'},{n:'克旗烤羊腿',d:'草原羔羊腿炭火烤制，外焦里嫩'},{n:'马奶酒',d:'马奶发酵的微酸酒饮，草原特色'},{n:'哈达饼',d:'层层酥皮的红糖馅饼，入口酥化'},{n:'风干牛肉',d:'草原风干的牛肉条，越嚼越香'}],attractions:[{n:'乌兰布统',d:'草原天路摄影天堂，秋天五彩斑斓'},{n:'克什克腾石阵',d:'世界地质公园，冰川遗迹奇观'},{n:'达里诺尔湖',d:'天鹅湖候鸟天堂，草原上的明珠'},{n:'玉龙沙湖',d:'沙漠与湖泊共存，沙中有湖湖中有岛'},{n:'红山公园',d:'红山文化发源地，赤峰城市标志'}]},
+  '呼伦贝尔':{food:[{n:'手把肉',d:'巴尔虎羊白水煮蘸野韭花酱，天下第一羊'},{n:'烤羊排',d:'外焦里嫩孜然飘香，草原上的味道'},{n:'布里亚特包子',d:'布里亚特蒙古族的羊肉包子，皮薄馅大'},{n:'奶桶肉',d:'奶桶里焖烤的羊肉，鲜嫩多汁'},{n:'列巴',d:'俄罗斯族传下来的黑面包，配蓝莓酱'},{n:'奶茶',d:'砖茶煮鲜奶加盐炒米，草原每日必备'}],attractions:[{n:'呼伦贝尔大草原',d:'世界四大草原之一，夏季绿毯无边'},{n:'满洲里',d:'中俄边境小城，套娃广场异国风情'},{n:'额尔古纳湿地',d:'亚洲第一湿地，根河蜿蜒如画'},{n:'莫尔道嘎',d:'大兴安岭深处的原始森林'},{n:'室韦',d:'中国唯一的俄罗斯民族乡'}]},
+  '通辽':{food:[{n:'科尔沁烤全羊',d:'科尔沁草原羔羊整只慢烤，蒙餐至尊'},{n:'牛肉干',d:'科尔沁黄牛风干的牛肉条，越嚼越香'},{n:'荞面饸饹',d:'荞麦面压成圆条，配羊肉臊子'},{n:'蒙古馅饼',d:'皮薄如纸的牛肉大葱馅饼'},{n:'炒米',d:'糜子炒制的金黄米粒，泡奶茶吃'},{n:'奶豆腐',d:'牛奶发酵压制的奶制品'}],attractions:[{n:'大青沟',d:'沙漠中的绿色峡谷，沙海奇观'},{n:'库伦三大寺',d:'清代藏传佛教寺庙群'},{n:'孝庄园',d:'清代孝庄文皇后的故居'},{n:'扎鲁特山地草原',d:'鲜花遍地的山地草原'}]},
+  '齐齐哈尔':{food:[{n:'齐齐哈尔烤肉',d:'炭火烤牛肉配蘸料，东北烤肉扛把子'},{n:'克东腐乳',d:'百年品牌，色泽红艳咸鲜适口'},{n:'依安大鹅',d:'铁锅炖大鹅贴玉米饼子，冬天暖身'},{n:'碾子山麦饭石烤肉',d:'麦饭石板上烤的肉，受热均匀'},{n:'拜泉糖蒜',d:'甜脆爽口的腌蒜，解腻神器'},{n:'富裕老窖',d:'黑龙江名酒，纯粮酿造醇厚不上头'}],attractions:[{n:'扎龙自然保护区',d:'世界最大丹顶鹤繁殖地，仙鹤飞舞'},{n:'明月岛',d:'嫩江中的河心岛，夏日避暑胜地'},{n:'龙沙公园',d:'百年公园，望江楼俯瞰嫩江'},{n:'昂昂溪遗址',d:'新石器时代遗址，了解远古文明'}]},
+  '大庆':{food:[{n:'坑烤',d:'在地上挖坑用炭火烤土豆鸡蛋地瓜肉，野趣美味'},{n:'铁锅炖大鱼',d:'大铁锅炖江鱼配豆腐粉条，锅边贴饼子'},{n:'大庆扒鸡',d:'先炸后卤骨酥肉烂色泽红亮'},{n:'黏豆包',d:'大黄米面包红豆馅蒸制，蘸白糖吃'},{n:'杀猪菜',d:'酸菜炖血肠白肉，东北农村年味'},{n:'林甸鸡',d:'散养草地鸡，炖汤黄亮味浓'}],attractions:[{n:'铁人王进喜纪念馆',d:'大庆精神和铁人精神的发源地'},{n:'大庆石油科技馆',d:'了解石油如何改变这座城市'},{n:'龙凤湿地',d:'城市中的湿地公园，观鸟拍落日'},{n:'连环湖',d:'温泉度假胜地，冬天泡汤看雪'},{n:'杜尔伯特草原',d:'黑龙江唯一的蒙古族自治县'}]},
+  '牡丹江':{food:[{n:'镜泊湖鱼宴',d:'镜泊湖的鳌花鲫花红尾鱼，清蒸红烧都鲜美'},{n:'朝鲜冷面',d:'荞麦面配冰镇牛肉汤，夏天一碗透心凉'},{n:'狗肉汤',d:'朝鲜族传统，汤浓肉烂配米饭'},{n:'小鸡炖蘑菇',d:'散养土鸡配榛蘑粉条，东北硬菜'},{n:'打糕',d:'朝鲜族手工捶打的糯米糕蘸豆面'},{n:'辣白菜',d:'朝鲜族腌制的辣白菜，酸辣爽脆'}],attractions:[{n:'镜泊湖',d:'中国最大高山堰塞湖，吊水楼瀑布壮观'},{n:'雪乡',d:'冬天雪深两米，童话世界的蘑菇雪'},{n:'地下森林',d:'火山口里的原始森林'},{n:'渤海国上京龙泉府遗址',d:'唐代渤海国都城遗址'},{n:'横道河子',d:'俄式风情小镇，东北虎林园'}]},
+  '吉林':{food:[{n:'煎粉',d:'粉块在平底锅上煎至焦脆，蘸蒜酱醋汁'},{n:'白肉血肠',d:'满族传统，五花白肉配猪血肠蘸蒜酱'},{n:'清蒸松花江白鱼',d:'松花江白鱼清蒸，肉质细嫩鲜美'},{n:'饸饹条',d:'荞麦面压成的圆面条，配酸菜卤'},{n:'打饭包',d:'白菜叶包米饭土豆泥鸡蛋酱，满族快餐'},{n:'人参鸡',d:'长白山鲜人参与土鸡同炖，补气养身'},{n:'雪衣豆沙',d:'蛋清打泡包裹豆沙油炸，白雪般蓬松'}],attractions:[{n:'松花湖',d:'丰满水电站形成的人工湖，夏日游船冬日滑雪'},{n:'北大壶滑雪场',d:'国内顶级滑雪胜地，粉雪天堂'},{n:'拉法山',d:'山势险峻洞穴奇特，关东名山'},{n:'北山公园',d:'吉林市的城中名山，古庙群佛道儒共存'},{n:'雾凇岛',d:'冬天雾凇奇观，玉树琼花如仙境'}]},
+  '锦州':{food:[{n:'锦州烧烤',d:'东北烧烤看锦州，什么都能烤，孜然味重'},{n:'沟帮子熏鸡',d:'百年品牌，色泽红亮烟熏香浓'},{n:'锦州小菜',d:'什锦酱菜配虾油，鲜咸脆嫩'},{n:'北镇猪蹄',d:'酱卤猪蹄软糯Q弹，下酒好菜'},{n:'凌海烧鸽子',d:'炭火烤鸽子肉嫩味香'},{n:'义县清真糕点',d:'香油制作的清真点心'}],attractions:[{n:'笔架山',d:'海中孤岛，退潮时天桥显现可步行上岛'},{n:'北普陀山',d:'关外第一佛山，观音道场'},{n:'辽沈战役纪念馆',d:'了解解放战争三大战役之首'},{n:'奉国寺',d:'辽代皇家寺院，七尊大佛气势恢宏'},{n:'医巫闾山',d:'东北三大名山之一，满族发祥地'}]},
+  '鞍山':{food:[{n:'海城馅饼',d:'皮薄如纸的馅饼，牛肉圆葱馅最经典'},{n:'岫岩羊汤',d:'岫岩山羊熬的汤，鲜而不膻'},{n:'台安炖大鹅',d:'铁锅炖大鹅配酸菜，东北硬菜'},{n:'南果梨',d:'鞍山特产水果，软糯香甜'},{n:'牛庄馅饼',d:'百年历史，外皮酥脆肉馅流油'}],attractions:[{n:'千山',d:'东北第一名山，999座山峰千姿百态'},{n:'玉佛苑',d:'世界最大玉佛，260吨岫岩玉雕成'},{n:'鞍钢博物馆',d:'了解共和国钢铁长子的历史'},{n:'汤岗子温泉',d:'千年温泉，末代皇帝溥仪曾来疗养'}]},
+  '丹东':{food:[{n:'丹东烧烤',d:'炭火烤肉配冰啤酒，鸭绿江边的夜生活'},{n:'黄蚬子',d:'鸭绿江口的大黄蚬子，炭烤鲜美多汁'},{n:'冷面',d:'朝鲜族冰镇荞麦冷面，酸甜爽口'},{n:'炒馇子',d:'玉米面做的条状主食，配海鲜炒'},{n:'东港草莓',d:'丹东草莓又大又甜，冬天一绝'},{n:'焖子',d:'地瓜粉块煎至金黄，蘸蒜酱'}],attractions:[{n:'鸭绿江断桥',d:'抗美援朝历史见证，江对面就是朝鲜'},{n:'虎山长城',d:'明长城最东端起点'},{n:'凤凰山',d:'辽东第一山，老牛背箭眼峰惊险'},{n:'青山沟',d:'辽东的九寨沟，瀑布溪流原始森林'},{n:'河口',d:'在那桃花盛开的地方，对岸朝鲜风光'}]},
+  '绍兴':{food:[{n:'绍兴臭豆腐',d:'外酥里嫩灌汤辣椒蒜蓉，闻着臭吃着香'},{n:'梅干菜扣肉',d:'绍兴梅干菜与五花肉同蒸，咸香油润'},{n:'绍兴黄酒',d:'花雕酒女儿红太雕酒，温一壶配茴香豆'},{n:'醉鸡',d:'绍兴酒腌制白切鸡，酒香入骨'},{n:'茴香豆',d:'孔乙己吃的茴香豆，黄酒伴侣'},{n:'酱鸭',d:'绍兴母子酱油腌制的鸭子，咸香入味'},{n:'霉千张',d:'发酵的千张豆腐，霉香独特绍兴独有'}],attractions:[{n:'鲁迅故里',d:'从百草园到三味书屋，走进鲁迅的童年'},{n:'东湖',d:'采石场形成的山水园林，乌篷船穿岩而过'},{n:'兰亭',d:'王羲之曲水流觞写兰亭序之地'},{n:'沈园',d:'陆游与唐婉钗头凤题壁处，千古爱情绝唱'},{n:'安昌古镇',d:'原生态水乡古镇，酱鸭腊肠挂满檐'},{n:'柯岩',d:'采石遗迹形成的大佛和奇石'}]},
+  '台州':{food:[{n:'食饼筒',d:'薄饼卷十几种菜，台州端午节必吃'},{n:'嵌糕',d:'年糕皮包五花肉蔬菜浇肉汁，软糯咸香'},{n:'姜汤面',d:'姜汁汤煮面配海鲜，台州人月子必吃'},{n:'蛋清羊尾',d:'蛋清打泡包豆沙炸成圆球，临海名点'},{n:'三门青蟹',d:'青蟹中的极品，清蒸蟹黄饱满'},{n:'扁食',d:'薄皮大馅的馄饨，台州特色'},{n:'姜汁调蛋',d:'姜汁红糖蒸蛋，暖宫驱寒'}],attractions:[{n:'天台山',d:'佛教天台宗发源地，国清寺千年古刹'},{n:'神仙居',d:'火山岩形成的奇峰怪石，仙气飘飘'},{n:'临海古城',d:'江南长城台州府城墙，紫阳老街'},{n:'大陈岛',d:'东海上的宝藏海岛，蓝眼泪季节绝美'},{n:'长屿硐天',d:'采石留下的巨大石窟，堪称奇观'}]},
+  '金华':{food:[{n:'金华火腿',d:'世界三大火腿之一，色泽红润香咸回甘'},{n:'金华酥饼',d:'梅干菜肉馅的小烧饼，酥脆掉渣'},{n:'义乌红糖',d:'甘蔗榨汁熬制的红糖，香甜醇厚'},{n:'永康肉麦饼',d:'肉馅厚实的烤饼，一个就饱'},{n:'东阳沃面',d:'浓汤煮的宽面，浇头丰富'},{n:'兰溪牛肉面',d:'爆炒牛肉配手擀面的汤面'}],attractions:[{n:'横店影视城',d:'中国好莱坞，一天走遍华夏五千年'},{n:'双龙洞',d:'卧船入洞的地下溶洞奇观'},{n:'诸葛八卦村',d:'诸葛亮后人按八卦布局建的村落'},{n:'义乌国际商贸城',d:'世界小商品之都，逛到腿软'},{n:'仙华山',d:'江南第一仙山，险峰怪石'}]},
+  '嘉兴':{food:[{n:'嘉兴粽子',d:'五芳斋肉粽糯而不糊肥而不腻，江南粽王'},{n:'南湖船菜',d:'南湖游船上品味湖鲜，江南风雅'},{n:'平湖糟蛋',d:'酒糟腌制的鸭蛋，咸香流油'},{n:'西塘八珍糕',d:'八种药材做的糕点，健脾养胃'},{n:'海宁缸肉',d:'大缸焖制的五花肉，酥烂入味'},{n:'桐乡煲',d:'桐乡羊肉煲，冬天暖身暖胃'}],attractions:[{n:'乌镇',d:'来过未曾离开，小桥流水枕水人家'},{n:'西塘',d:'活着的千年古镇，烟雨长廊'},{n:'南湖',d:'中共一大红船起航地'},{n:'盐官观潮',d:'海宁潮八月十八壮观天下无'},{n:'月河老街',d:'嘉兴城中水乡古街'}]},
+  '芜湖':{food:[{n:'虾子面',d:'虾子熬汤煮面，鲜美无比芜湖名小吃'},{n:'红皮鸭子',d:'芜湖烤鸭色泽红亮皮脆肉嫩'},{n:'小笼汤包',d:'芜湖版汤包皮薄汁多，蘸醋吃'},{n:'腰子饼',d:'形似猪腰的油炸萝卜丝饼'},{n:'耿福兴酥烧饼',d:'百年老店，层层酥脆'},{n:'无为板鸭',d:'烟熏板鸭咸香浓郁'}],attractions:[{n:'方特欢乐世界',d:'大型主题乐园，四个园区各有特色'},{n:'鸠兹古镇',d:'千年古镇复建，徽派建筑'},{n:'镜湖公园',d:'芜湖城中的明珠'},{n:'马仁奇峰',d:'悬崖峭壁上的玻璃栈道'}]},
+  '九江':{food:[{n:'庐山三石',d:'石鸡石鱼石耳，庐山山珍三绝'},{n:'浔阳鱼席',d:'长江鲜鱼做的全鱼宴'},{n:'九江茶饼',d:'茶油和面的小酥饼，配茶最佳'},{n:'修水哨子',d:'红薯粉皮包馅蒸制，Q弹爽滑'},{n:'湖口糟鱼',d:'酒糟腌制的鱼，咸鲜美酒伴侣'},{n:'萝卜饼',d:'九江街头的油炸萝卜丝饼'},{n:'庐山云雾茶',d:'中国十大名茶之一'}],attractions:[{n:'庐山',d:'匡庐奇秀甲天下，三叠泉五老峰'},{n:'浔阳楼',d:'浔阳江头夜送客，宋江题反诗处'},{n:'庐山西海',d:'千岛落珠的美丽水库'},{n:'石钟山',d:'苏轼石钟山记，江湖两色奇观'}]},
+  '宜昌':{food:[{n:'红油小面',d:'宜昌人的早餐，红油辣汤煮面'},{n:'萝卜饺子',d:'萝卜丝馅炸饺子，外酥内鲜'},{n:'凉拌鱼腥草',d:'折耳根凉拌，宜昌人最爱的凉菜'},{n:'夷陵春卷',d:'薄饼卷豆芽肉丝炸制'},{n:'三游洞神仙鸡',d:'土鸡配中药材慢炖，滋补美味'},{n:'清江鱼',d:'清江里的鲜鱼，怎么烧都好吃'},{n:'凉虾',d:'大米浆做的虾形凉品，夏天消暑'}],attractions:[{n:'三峡大坝',d:'世界最大水利工程，高峡出平湖'},{n:'清江画廊',d:'八百里清江美如画'},{n:'三峡人家',d:'西陵峡中的土家风情'},{n:'屈原故里',d:'秭归屈原祠，端午文化的源头'}]},
+  '襄阳':{food:[{n:'襄阳牛肉面',d:'牛油红汤配碱面，襄阳人的灵魂早餐'},{n:'宜城大虾',d:'麻辣小龙虾配冰啤酒，襄阳夏天'},{n:'孔明菜',d:'大头菜腌制，诸葛亮发明的军中干粮'},{n:'襄阳缠蹄',d:'猪蹄用麻绳缠紧卤制，Q弹爽口'},{n:'金刚酥',d:'襄阳特产烤馍，百年传承'},{n:'襄阳黄酒',d:'糯米酿造的地方黄酒，配牛肉面喝'}],attractions:[{n:'古隆中',d:'诸葛亮隐居之地，三顾茅庐发生地'},{n:'襄阳古城',d:'华夏第一城池，郭靖黄蓉守过的城'},{n:'唐城影视基地',d:'妖猫传拍摄地，盛世大唐再现'},{n:'米公祠',d:'宋代书法家米芾的祠堂'}]},
+  '遵义':{food:[{n:'遵义羊肉粉',d:'贵州羊肉粉的代表，红油清汤可选'},{n:'豆花面',d:'嫩豆花配宽面蘸辣椒水吃'},{n:'遵义鸡蛋糕',d:'老字号鸡蛋糕，松软香甜'},{n:'湄潭翠芽',d:'中国名茶，清香回甘'},{n:'乌江豆腐鱼',d:'乌江鱼配遵义豆腐，麻辣鲜香'},{n:'凤冈绿豆粉',d:'绿豆做的粉皮，夏天凉拌最佳'}],attractions:[{n:'遵义会议会址',d:'中国革命转折点，红色旅游第一站'},{n:'赤水丹霞',d:'世界自然遗产，红色砂岩瀑布群'},{n:'茅台镇',d:'国酒茅台的故乡，整条街都是酒香'},{n:'娄山关',d:'雄关漫道真如铁，红军长征战斗地'},{n:'海龙屯',d:'中世纪土司城堡遗址，世界文化遗产'}]},
+  '北海':{food:[{n:'海鲜',d:'沙虫泥丁花蟹石斑鱼，北部湾的鲜味'},{n:'虾饼',d:'街头小吃，小虾裹面糊油炸至金黄'},{n:'蟹仔粉',d:'蟹黄蟹肉煮米粉，鲜到极致'},{n:'猪脚粉',d:'卤猪脚配米粉，北海人早餐标配'},{n:'沙虫',d:'北部湾独有的海鲜，清蒸蒜蓉都鲜'},{n:'糖水',d:'北海人的下午茶，各种糖水甜品'}],attractions:[{n:'涠洲岛',d:'中国最年轻的火山岛，碧海蓝天'},{n:'银滩',d:'天下第一滩，沙细白如银'},{n:'北海老街',d:'百年骑楼建筑街，虾饼蟹仔粉一路吃'},{n:'冠头岭',d:'俯瞰北部湾，日落最佳观赏点'},{n:'侨港风情街',d:'越南归侨聚集地，越式小吃糖水'}]},
+  '柳州':{food:[{n:'螺蛳粉',d:'酸辣鲜香烫，酸笋是灵魂，闻着臭吃着上瘾'},{n:'鸭脚煲',d:'带皮鸭脚炖到酥烂，配螺蛳酸笋'},{n:'炒螺蛳',d:'小螺蛳爆炒紫苏辣椒，嗦到停不下'},{n:'三江油茶',d:'侗族油茶，茶叶姜蒜捶打冲水喝'},{n:'融水香猪',d:'烤乳猪皮脆肉嫩，侗族特色'},{n:'云片糕',d:'柳州特产，洁白如云薄如纸'}],attractions:[{n:'龙潭公园',d:'喀斯特地貌的城中公园，山清水秀'},{n:'程阳八寨',d:'侗族风雨桥鼓楼群，世界文化遗产'},{n:'百里柳江',d:'夜游柳江，两岸灯光音乐喷泉'},{n:'窑埠古镇',d:'柳州版清明上河图'}]},
+  '湛江':{food:[{n:'生蚝',d:'湛江生蚝个大肥美，炭烤蒜蓉蒸都绝'},{n:'白切鸡',d:'湛江鸡皮爽肉滑，广东三大名鸡之一'},{n:'沙虫',d:'北部湾沙虫，清蒸蒜蓉鲜美无比'},{n:'碳烤生蚝',d:'炭火烤生蚝配蒜蓉粉丝，宵夜之王'},{n:'吴川烂镬炒粉',d:'大铁锅爆炒河粉，锅气十足'},{n:'安铺鸡',d:'白切鸡中的极品，蘸沙姜酱油'}],attractions:[{n:'湖光岩',d:'世界最大玛珥湖，湖水清澈'},{n:'东海岛',d:'28公里长的海滩，中国最长沙滩'},{n:'硇洲岛',d:'火山岛，灯塔百年的南海守望者'},{n:'湛江金沙湾',d:'滨海休闲带，椰风海韵'}]},
+  '镇江':{food:[{n:'镇江锅盖面',d:'小锅盖漂在锅里煮的面，酱油汤底灵魂'},{n:'镇江肴肉',d:'硝腌制的猪肉冻，蘸镇江香醋绝配'},{n:'镇江香醋',d:'中国四大名醋，蘸饺子拌凉菜万能'},{n:'蟹黄汤包',d:'蟹黄蟹肉做馅的大汤包，先吸汤后吃皮'},{n:'茅山老鹅',d:'传统卤鹅，肉质紧实咸香'},{n:'东乡羊肉',d:'红烧羊肉配大白菜，冬日暖身硬菜'}],attractions:[{n:'金山寺',d:'白娘子水漫金山的故事发生地'},{n:'西津渡',d:'千年古渡口，三国至今的历史叠层'},{n:'北固山',d:'何处望神州满眼风光北固楼'},{n:'茅山',d:'道教名山，第一福地第八洞天'}]},
+  '威海':{food:[{n:'海鲜大咖',d:'各种海鲜拼盘，蒸煮烤炸一桌吃遍'},{n:'鲅鱼水饺',d:'鲅鱼肉包的水饺，鲜嫩多汁'},{n:'无花果',d:'威海青皮无花果，软糯甜蜜'},{n:'海胆蒸蛋',d:'新鲜海胆与鸡蛋同蒸，嫩滑鲜美'},{n:'烤海蛎子',d:'威海生蚝炭火烤配蒜蓉'},{n:'海菜包子',d:'海裙带菜做馅的包子，海洋风味'}],attractions:[{n:'刘公岛',d:'甲午海战纪念地，爱国主义教育基地'},{n:'成山头',d:'天尽头，中国海岸线最东端'},{n:'火炬八街',d:'通往大海的网红坡道，拍照圣地'},{n:'国际海水浴场',d:'沙细水清，夏日游泳好去处'},{n:'猫头山',d:'形似卧猫的海边观景台'}]},
+  '扬州':{food:[{n:'扬州炒饭',d:'粒粒分明的金包银炒饭，虾仁火腿青豆鸡蛋'},{n:'大煮干丝',d:'豆腐干切成细丝配鸡汤火腿，刀工极致'},{n:'蟹粉狮子头',d:'蟹黄蟹肉与猪肉做的巨型肉丸，入口即化'},{n:'三丁包',d:'鸡丁肉丁笋丁做馅的包子，鲜上加鲜'},{n:'翡翠烧卖',d:'荠菜做馅碧绿如玉，扬州早茶名点'},{n:'文思豆腐',d:'豆腐切成头发丝细入清汤，刀工绝伦'},{n:'扬州老鹅',d:'盐水鹅咸香细嫩，街头巷尾都在卖'}],attractions:[{n:'瘦西湖',d:'两岸花柳全依水一路楼台直到山'},{n:'个园',d:'四季假山巧夺天工，中国四大名园之一'},{n:'东关街',d:'千年老街，扬州小吃老字号聚集'},{n:'何园',d:'晚清第一名园，复道回廊中西合璧'},{n:'大明寺',d:'鉴真东渡出发地，栖灵塔'},{n:'古运河',d:'乘船夜游古运河，灯火璀璨'}]},
+  '常州':{food:[{n:'天目湖砂锅鱼头',d:'天目湖花鲢鱼头砂锅慢炖，汤白如奶'},{n:'大麻糕',d:'常州传统酥饼，香甜可口'},{n:'萝卜干',d:'常州萝卜干脆爽咸甜，佐粥下饭'},{n:'虾饼',d:'小河虾裹面糊油炸至金黄酥脆'},{n:'网油卷',d:'猪网油卷豆沙炸制，外酥内甜'},{n:'银丝面',d:'细如发丝的龙须面，筋道爽滑'}],attractions:[{n:'中华恐龙园',d:'中国最大恐龙主题乐园'},{n:'天目湖',d:'山水园泛舟品砂锅鱼头'},{n:'淹城',d:'春秋淹城遗址，三城三河格局'},{n:'南山竹海',d:'万亩竹海，天然氧吧缆车穿行'}]},
+  '徐州':{food:[{n:'地锅鸡',d:'柴火锅炖鸡锅边贴面饼，汤汁浓郁'},{n:'饣它汤',d:'鸡骨猪骨熬的浓汤配鸡蛋冲，徐州早餐'},{n:'把子肉',d:'大块五花肉酱炖，肥而不腻'},{n:'羊方藏鱼',d:'羊肉裹着鱼肉同煮，鲜字就是这么来的'},{n:'烙馍',d:'薄饼卷各种菜吃，徐州人日常'},{n:'蜜三刀',d:'油炸面点裹糖浆，甜酥可口'}],attractions:[{n:'云龙山',d:'苏轼笔下的云龙山，放鹤亭怀古'},{n:'汉文化景区',d:'狮子山楚王陵汉兵马俑'},{n:'龟山汉墓',d:'两千年前的汉代王陵甬道精度惊人'},{n:'徐州博物馆',d:'两汉文化看徐州，文物宝藏'}]},
+}
+
+// ========== Province → Capital Mapping ==========
+const provinceCapital = {
+  '北京':'北京','上海':'上海','天津':'天津','重庆':'重庆',
+  '河北':'石家庄','山西':'太原','内蒙古':'呼和浩特','辽宁':'沈阳','吉林':'长春','黑龙江':'哈尔滨',
+  '江苏':'南京','浙江':'杭州','安徽':'合肥','福建':'福州','江西':'南昌','山东':'济南',
+  '河南':'郑州','湖北':'武汉','湖南':'长沙','广东':'广州','广西':'南宁','海南':'海口',
+  '四川':'成都','贵州':'贵阳','云南':'昆明','西藏':'拉萨','陕西':'西安','甘肃':'兰州',
+  '青海':'西宁','宁夏':'银川','新疆':'乌鲁木齐','台湾':'台北','香港':'香港','澳门':'澳门',
+};
+// City aliases (名/bz → full name)
+const cityAlias = {'南宁市':'南宁','贵阳市':'贵阳','昆明市':'昆明','拉萨市':'拉萨','兰州市':'兰州','西宁市':'西宁','银川市':'银川','呼和浩特市':'呼和浩特','海口市':'海口','哈尔滨市':'哈尔滨','广州市':'广州','杭州市':'杭州','南京市':'南京','武汉市':'武汉','成都市':'成都','西安市':'西安','长沙市':'长沙','合肥市':'合肥','石家庄市':'石家庄','太原市':'太原','沈阳市':'沈阳','长春市':'长春','郑州市':'郑州','南昌市':'南昌','济南市':'济南','贵阳市':'贵阳','福州市':'福州','呼伦贝尔':'呼伦贝尔','延吉':'延边','伊宁':'伊犁','西昌':'凉山','凯里':'黔东南','都匀':'黔南','景洪':'西双版纳','大理市':'大理','香格里拉':'迪庆','蒙自':'红河','芒市':'德宏','库尔勒':'巴音郭楞','锡林浩特':'锡林郭勒','喀什市':'喀什地区','和田市':'和田地区','阿克苏市':'阿克苏地区','阿勒泰市':'阿勒泰地区','塔城市':'塔城地区','伊宁市':'伊犁'};
+
+function getCityGuide(cityName, provName) {
+  // 1. 精确匹配
+  if (cityGuide[cityName]) return cityGuide[cityName];
+  // 1b. 别名
+  const alias = cityAlias[cityName];
+  if (alias && cityGuide[alias]) return cityGuide[alias];
+  // 2. 去"市/省/州/区/县"后缀再精确
+  const clean = cityName.replace(/[市区县州]$/,'');
+  if (cityGuide[clean]) return cityGuide[clean];
+  if (cityAlias[clean] && cityGuide[cityAlias[clean]]) return cityGuide[cityAlias[clean]];
+  // 3. 省名 → 省会
+  const capital = provinceCapital[cityName] || provinceCapital[clean] || (provName ? provinceCapital[provName] : null);
+  if (capital && cityGuide[capital]) return cityGuide[capital];
+  // 4. 区/县 → 找到所在城市（provName 中匹配）
+  if (provName) {
+    if (cityGuide[provName]) return cityGuide[provName];
+    const provClean = provName.replace(/[省市区县州]$/,'');
+    if (cityGuide[provClean]) return cityGuide[provClean];
+    const provCap = provinceCapital[provName] || provinceCapital[provClean];
+    if (provCap && cityGuide[provCap]) return cityGuide[provCap];
+  }
+  // 5. Cache (7-day)
+  const cached = getGuideFromCache(cityName);
+  if (cached) return cached;
+  return null;
+}
+
+// ========== Smart Template Fallback ==========
+function buildTemplateGuide(cityName, provName) {
+  const loc = provName ? cityName+'（'+provName+'）' : cityName;
+  return {
+    attractions: [
+      {n:loc+'城市公园',d:'在'+loc+'漫步城市绿肺，感受当地悠闲生活节奏'},
+      {n:loc+'博物馆',d:'了解'+loc+'的历史文化和风土人情，值得花半天细细品味'},
+      {n:loc+'商业街',d:'逛'+loc+'最热闹的街区，淘当地特产和手工艺品'},
+      {n:loc+'自然风景',d:loc+'周边的自然风光，周末出游好去处'},
+      {n:loc+'古迹遗址',d:loc+'的历史遗迹，见证这座城市的文化底蕴'},
+    ],
+    food: [
+      {n:'当地特色菜',d:loc+'的本地菜肴融合了地域传统，口味独特值得一尝'},
+      {n:'街头小吃',d:'在'+loc+'的夜市或小吃街，可以找到最地道的街头美味'},
+      {n:'特产手信',d:'来'+loc+'一定要带些当地特产回去，送礼自用两相宜'},
+      {n:'传统早点',d:loc+'人的早餐文化丰富，从一碗热腾腾的面开始新的一天'},
+      {n:'时令美食',d:'根据季节不同，'+loc+'有各种应季的时令美味'},
+    ],
+  };
+}
+
+// ========== Load Panels (no Wikipedia, no external API) ==========
+function loadPanelsSync(cityName, provName) {
+  const attContent = document.getElementById('panelAttContent');
+  const foodContent = document.getElementById('panelFoodContent');
+  const guide = getCityGuide(cityName, provName);
+  const finalGuide = guide || buildTemplateGuide(cityName, provName);
+  renderPanel(attContent, finalGuide.attractions, '景点');
+  renderPanel(foodContent, finalGuide.food, '美食');
+}
+
+// ========== Cache Helpers ==========
+function getGuideFromCache(cityName){
+  try{const r=localStorage.getItem('wg_'+cityName);if(!r)return null;const d=JSON.parse(r);if(Date.now()-d.t<7*24*3600*1000)return d.v;localStorage.removeItem('wg_'+cityName);}catch(e){}
+  return null;
+}
+function setGuideToCache(cityName,v){try{localStorage.setItem('wg_'+cityName,JSON.stringify({v,t:Date.now()}));}catch(e){}}
+
+// ========== Render Panel ==========
+function renderPanel(container, items, tag) {
+  if (!items || items.length===0) {
+    container.innerHTML='<div class="panel-item"><div class="item-name">暂无数据</div><div class="item-desc">换个城市试试吧</div></div>';
+    return;
+  }
+  container.innerHTML = items.map((item,i)=>{
+    const name = item.n || item.name || '';
+    const desc = item.d || item.desc || item.description || '';
+    return '<div class="panel-item">'+
+      (name?'<div class="item-name">'+(i+1)+'. '+name+'</div>':'')+
+      '<div class="item-desc">'+desc+'</div>'+
+      (tag?'<span class="item-rank">'+tag+'</span>':'')+
+    '</div>';
+  }).join('');
+}
+
+function updateSidePanels(cityName) {
+  loadPanelsSync(cityName, currentProv);
+}
+
+// ========== Render ==========
+function render(data, entry) {
+  const cw = data.current_weather, daily = data.daily, hourly = data.hourly;
+  const wmo = cw.weathercode; const [icon, desc] = getWeather(wmo);
+  const cat = classifyWMO(wmo); applyTheme(cat);
+  if (cat === WCAT.THUNDER) scheduleThunder(); else stopThunder();
+
+  const nowIdx = Math.max(0, (hourly.time || []).findIndex(t => new Date(t) > new Date()) - 1);
+  const feelLike = hourly.apparent_temperature?.[nowIdx] ?? cw.temperature;
+  const humidity = hourly.relative_humidity_2m?.[nowIdx] ?? '--';
+  const visibility = hourly.visibility?.[nowIdx];
+  const pressure = hourly.pressure_msl?.[nowIdx];
+  const visKm = visibility ? (visibility / 1000).toFixed(1) : '--';
+  const uvMax = daily.uv_index_max?.[0] ?? '--';
+  const windGust = daily.wind_gusts_10m_max?.[0] ?? '--';
+  const windSpd = daily.wind_speed_10m_max?.[0] ?? cw.windspeed;
+  const sunrise = formatTime(daily.sunrise?.[0]);
+  const sunset = formatTime(daily.sunset?.[0]);
+  const precipProb = daily.precipitation_probability_max[0] ?? 0;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+  const forecastHTML = daily.time.slice(0, 5).map((ds, i) => {
+    const d = new Date(ds + 'T12:00:00');
+    const dow = i === 0 ? '今天' : dayNames[d.getDay()];
+    const [fIcon] = getWeather(daily.weathercode[i]);
+    const hi = Math.round(daily.temperature_2m_max[i]), lo = Math.round(daily.temperature_2m_min[i]);
+    return '<div class="forecast-day"><div class="dow">' + dow + '</div><div class="d-icon">' + fIcon + '</div><div class="d-temps"><span class="d-hi">' + hi + '°</span><span class="d-lo">' + lo + '°</span></div></div>';
+  }).join('');
+
+  // Build display name
+  const isMuni = ['北京', '上海', '天津', '重庆'].includes(entry.p);
+  let displayName, displaySub;
+  if (isMuni) {
+    displayName = entry.n;
+    displaySub = entry.p;
+  } else {
+    displayName = entry.n;
+    displaySub = (entry.c && entry.c !== entry.n ? entry.c + ' · ' : '') + entry.p;
+  }
+
+  document.getElementById('weatherContent').innerHTML =
+    '<div class="city-hero" id="cityHero">' +
+      '<div class="hero-skeleton" id="heroSkeleton"></div>' +
+      '<img id="heroImg" src="" alt="" style="display:none" onload="this.style.display=\'\';document.getElementById(\'heroSkeleton\').style.display=\'none\'">' +
+      '<div class="hero-label">' + displayName + '</div>' +
+    '</div>' +
+    '<div class="weather-main">' +
+      '<div class="weather-icon">' + icon + '</div>' +
+      '<div class="temp-block"><div class="temp-current">' + Math.round(cw.temperature) + '<span class="temp-unit">°C</span></div><div class="weather-desc">' + desc + '</div></div>' +
+    '</div>' +
+    '<div class="city-row">' +
+      '<div><span class="city-name">📍 ' + displayName + '</span><span class="city-sub"> ' + displaySub + '</span></div>' +
+      '<span class="refresh-dot" title="实时更新中"></span>' +
+      '<span class="update-time">更新于 ' + timeStr + '</span>' +
+    '</div>' +
+    '<div class="sun-row">' +
+      '<div class="sun-card"><span class="sun-icon">🌅</span><div><div class="sun-label">日出</div><div class="sun-time">' + sunrise + '</div></div></div>' +
+      '<div class="sun-card"><span class="sun-icon">🌇</span><div><div class="sun-label">日落</div><div class="sun-time">' + sunset + '</div></div></div>' +
+      '<div class="sun-card"><span class="sun-icon">☀️</span><div><div class="sun-label">紫外线指数</div><div class="sun-time">' + uvMax + '</div></div></div>' +
+    '</div>' +
+    '<div class="details-grid">' +
+      '<div class="detail-item"><div class="label">体感温度</div><div class="value">' + Math.round(feelLike) + '<span class="unit">°C</span></div></div>' +
+      '<div class="detail-item"><div class="label">湿度</div><div class="value">' + humidity + '<span class="unit">%</span></div></div>' +
+      '<div class="detail-item"><div class="label">风速</div><div class="value">' + Math.round(windSpd) + '<span class="unit">km/h</span></div></div>' +
+      '<div class="detail-item"><div class="label">阵风</div><div class="value">' + (typeof windGust === 'number' ? Math.round(windGust) : windGust) + '<span class="unit">km/h</span></div></div>' +
+      '<div class="detail-item"><div class="label">风向</div><div class="value">' + windDirection(cw.winddirection) + '</div></div>' +
+      '<div class="detail-item"><div class="label">能见度</div><div class="value">' + visKm + '<span class="unit">km</span></div></div>' +
+      '<div class="detail-item"><div class="label">气压</div><div class="value">' + (typeof pressure === 'number' ? Math.round(pressure) : '--') + '<span class="unit">hPa</span></div></div>' +
+      '<div class="detail-item"><div class="label">降水概率</div><div class="value">' + precipProb + '<span class="unit">%</span></div></div>' +
+    '</div>' +
+    '<div class="forecast-title">📅 未来五天</div>' +
+    '<div class="forecast-strip">' + forecastHTML + '</div>';
+
+  // Fetch city image for hero + carousel background
+  const imgSearchName = isMuni ? entry.p : (entry.c || entry.n);
+  // Load side panels (attractions + food)
+  updateSidePanels(imgSearchName);
+  const heroImg = document.getElementById('heroImg');
+  const heroSkel = document.getElementById('heroSkeleton');
+  // First quickly fetch the city main image for the hero
+  (async function loadCityImages(){
+    const allImages = await fetchScenicImages(imgSearchName);
+    if (allImages.length > 0) {
+      // Set hero image
+      if (heroImg) {
+        heroImg.src = allImages[0].url;
+        heroImg.alt = allImages[0].desc || imgSearchName;
+        heroImg.onload = function(){heroImg.style.display='';heroSkel.style.display='none';};
+        heroImg.onerror = function(){heroSkel.style.display='none';};
+      }
+      // Build carousel background
+      buildCarousel(allImages);
+    } else {
+      if (heroSkel) heroSkel.style.display = 'none';
+    }
+  })();
+}
+
+function showLoading() {
+  stopCarousel();
+  document.getElementById('weatherContent').innerHTML = '<div class="loader"><div class="spinner"></div><span class="loader-text">正在获取 ' + currentCity + ' 的天气…</span></div>';
+}
+function showError(msg) {
+  document.getElementById('weatherContent').innerHTML = '<div class="error-msg">⚠️ ' + msg + '<br><span style="font-size:12px;opacity:0.5;margin-top:10px;display:inline-block;">请检查网络连接后重试</span></div>';
+}
+
+// ========== Core ==========
+async function loadWeather(lat, lon, entry) {
+  showLoading();
+  try {
+    const data = await fetchWeather(lat, lon);
+    currentLat = lat; currentLon = lon;
+    currentCity = entry.n; currentProv = entry.p;
+    render(data, entry);
+  } catch (e) { showError('无法获取天气数据'); console.error(e); }
+}
+
+async function onSearch(query) {
+  const dd = document.getElementById('searchDropdown');
+  if (!query.trim()) { dd.classList.remove('active'); return; }
+  try {
+    const results = await geocode(query.trim());
+    if (results.length === 0) {
+      dd.innerHTML = '<div class="item"><span class="loc-name" style="color:rgba(255,255,255,0.35);">未找到匹配位置</span></div>';
+      dd.classList.add('active'); return;
+    }
+    dd.innerHTML = results.map(r =>
+      '<div class="item" data-lat="' + r.lat + '" data-lon="' + r.lon + '" data-name="' + r.n + '" data-prov="' + r.p + '" data-city="' + (r.c || '') + '">' +
+        '<span class="loc-name">' + r.n + '</span>' +
+        '<span class="loc-path">' + r.displayPath + '</span>' +
+      '</div>'
+    ).join('');
+    dd.classList.add('active');
+    dd.querySelectorAll('.item[data-lat]').forEach(el => {
+      el.addEventListener('click', () => {
+        document.getElementById('searchInput').value = el.dataset.name;
+        dd.classList.remove('active');
+        loadWeather(parseFloat(el.dataset.lat), parseFloat(el.dataset.lon), {
+          n: el.dataset.name, p: el.dataset.prov, c: el.dataset.city,
+          displayPath: el.querySelector('.loc-path').textContent
+        });
+      });
+    });
+  } catch (e) { console.error(e); dd.classList.remove('active'); }
+}
+
+// ========== Events ==========
+const si = document.getElementById('searchInput'), sd = document.getElementById('searchDropdown');
+si.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => onSearch(si.value), 180); });
+si.addEventListener('focus', () => { if (sd.children.length > 0) sd.classList.add('active'); });
+si.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const f = sd.querySelector('.item[data-lat]'); if (f) f.click(); sd.classList.remove('active'); }
+  if (e.key === 'Escape') { sd.classList.remove('active'); si.blur(); }
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) sd.classList.remove('active'); });
+
+function startAutoRefresh() { refreshTimer = setInterval(() => { loadWeather(currentLat, currentLon, { n: currentCity, p: currentProv, c: currentCity, displayPath: currentCity + ' · ' + currentProv }); }, 5 * 60 * 1000); }
+
+// ========== Sparkle Generator ==========
+function initSparkles(){
+  const frag = document.createDocumentFragment();
+  for(let i=0;i<25;i++){
+    const s = document.createElement('div');
+    s.className = 'sparkle';
+    s.style.left = Math.random()*95+'%';
+    s.style.top = (Math.random()*60+20)+'%';
+    s.style.setProperty('--sdur',(Math.random()*6+4)+'s');
+    s.style.setProperty('--sdelay',(Math.random()*8)+'s');
+    s.style.width = (Math.random()*2+1)+'px';
+    s.style.height = s.style.width;
+    frag.appendChild(s);
+  }
+  document.body.appendChild(frag);
+}
+
+async function init() {
+  await loadWeather(39.9042, 116.4074, { n: '北京', p: '北京', c: '北京', displayPath: '北京' });
+  startAutoRefresh();
+  initSparkles();
+}
+init();
+</script>
+</body>
+</html>
