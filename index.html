@@ -254,29 +254,35 @@
     display: flex; flex-direction: column; gap: 8px;
   }
 
+  /* Hide mobile buttons on wide screens */
+  .mobile-fab { display: none; }
+  .mobile-overlay-backdrop { display: none; }
+
   /* ========== Responsive: Mobile Overlay Panels ========== */
   @media (max-width: 1200px) {
     .app { grid-template-columns: 1fr; max-width: 720px; }
     .side-panel { display: none; }
 
-    /* Floating buttons */
+    /* Floating buttons — direct body children, always on top */
     .mobile-fab {
-      position: fixed; z-index: 10;
-      width: 48px; height: 48px; border-radius: 50%;
-      background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.15);
+      position: fixed; z-index: 99;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: rgba(255,255,255,0.12); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+      border: 1.5px solid rgba(255,255,255,0.2);
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; cursor: pointer; transition: all 0.3s ease;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      font-size: 24px; cursor: pointer; transition: all 0.3s ease;
+      box-shadow: 0 6px 28px rgba(0,0,0,0.5);
       animation: fabBounce 0.6s ease;
+      color: #fff; padding: 0;
     }
-    .mobile-fab:active { transform: scale(0.9); }
-    .mobile-fab.left { bottom: 140px; left: 16px; }
-    .mobile-fab.right { bottom: 140px; right: 16px; }
+    .mobile-fab:active { transform: scale(0.9); background: rgba(255,255,255,0.2); }
+    .mobile-fab.left { bottom: 120px; left: 20px; }
+    .mobile-fab.right { bottom: 120px; right: 20px; }
     @keyframes fabBounce { 0%{transform:scale(0)} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
 
-    /* Overlay backdrop */
+    .mobile-fab { display: flex; }
     .mobile-overlay-backdrop {
+      display: block;
       position: fixed; inset: 0; z-index: 20;
       background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
       opacity: 0; pointer-events: none; transition: opacity 0.35s ease;
@@ -375,11 +381,11 @@
   <!-- Mobile overlay backdrop -->
   <div class="mobile-overlay-backdrop" id="mobileBackdrop" onclick="closeMobilePanels()"></div>
 
-  <!-- Mobile floating buttons (visible only on small screens) -->
-  <button class="mobile-fab left" id="fabAttractions" onclick="openMobilePanel('left')" title="景点推荐">🏛️</button>
-  <button class="mobile-fab right" id="fabFood" onclick="openMobilePanel('right')" title="美食推荐">🍜</button>
-
 </main>
+
+<!-- Mobile floating buttons (outside main for proper stacking) -->
+<button class="mobile-fab left" id="fabAttractions" onclick="openMobilePanel('left')" title="景点推荐">🏛️</button>
+<button class="mobile-fab right" id="fabFood" onclick="openMobilePanel('right')" title="美食推荐">🍜</button>
 
 <script>
 // ========== Weather Category ==========
