@@ -156,7 +156,7 @@
   .search-dropdown .item .loc-name { font-size: 15px; color: rgba(255,255,255,0.85); }
   .search-dropdown .item .loc-path { font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 1px; }
 
-  .city-hero { position: relative; width: 100%; height: 200px; border-radius: 20px; overflow: hidden; margin-bottom: 32px; background: rgba(255,255,255,0.03); }
+  .city-hero { position: relative; width: 100%; height: 200px; border-radius: 20px; overflow: hidden; margin-bottom: 32px; background: linear-gradient(135deg, rgba(100,130,200,0.15) 0%, rgba(80,100,160,0.08) 50%, rgba(60,80,140,0.15) 100%); }
   .city-hero img { width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease; }
   .city-hero .hero-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 48px 24px 20px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); color: #fff; font-size: 26px; font-weight: 600; letter-spacing: 1px; }
   .city-hero .hero-skeleton { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%); background-size: 200% 100%; animation: shimmer 2s infinite; border-radius: 20px; }
@@ -492,14 +492,8 @@ async function fetchScenicImages(cityName){
     }
   }catch(e){console.warn('WP search fail:',e);}
 
-  // Method 3: Unsplash fallback (works globally without API key)
-  if(images.length < 3){
-    try{
-      images.push({url:'https://source.unsplash.com/1920x1080/?'+encodeURIComponent(cityName+' city'), title:cityName, desc:cityName});
-      images.push({url:'https://source.unsplash.com/1920x1080/?'+encodeURIComponent(cityName+' landmark'), title:cityName, desc:cityName});
-    }catch(e){}
-  }
-
+  // Last resort: placeholder gradient — always ensures at least 1 slide
+  if(images.length===0) return [];
   return images;
 }
 
@@ -1074,7 +1068,7 @@ function render(data, entry) {
   document.getElementById('weatherContent').innerHTML =
     '<div class="city-hero" id="cityHero">' +
       '<div class="hero-skeleton" id="heroSkeleton"></div>' +
-      '<img id="heroImg" src="" alt="" style="display:none" onload="this.style.display=\'\';document.getElementById(\'heroSkeleton\').style.display=\'none\'">' +
+      '<img id="heroImg" src="" alt="" style="display:none">' +
       '<div class="hero-label">' + displayName + '</div>' +
     '</div>' +
     '<div class="weather-main">' +
@@ -1106,25 +1100,36 @@ function render(data, entry) {
 
   // Fetch city image for hero + carousel background
   const imgSearchName = isMuni ? entry.p : (entry.c || entry.n);
-  // Load side panels (attractions + food)
+  // Load side panels (attractions + food) — sync first, images async
   updateSidePanels(imgSearchName);
+
   const heroImg = document.getElementById('heroImg');
   const heroSkel = document.getElementById('heroSkeleton');
-  // First quickly fetch the city main image for the hero
+  // Hide skeleton after 8 seconds regardless
+  const skelTimeout = setTimeout(function(){if(heroSkel)heroSkel.style.display='none';},8000);
+
   (async function loadCityImages(){
     const allImages = await fetchScenicImages(imgSearchName);
-    if (allImages.length > 0) {
+    if (allImages && allImages.length > 0) {
+      // Build carousel background first
+      buildCarousel(allImages);
       // Set hero image
       if (heroImg) {
+        heroImg.addEventListener('load', function(){
+          heroImg.style.display='';
+          if(heroSkel)heroSkel.style.display='none';
+          clearTimeout(skelTimeout);
+        }, {once:true});
+        heroImg.addEventListener('error', function(){
+          if(heroSkel)heroSkel.style.display='none';
+          clearTimeout(skelTimeout);
+        }, {once:true});
         heroImg.src = allImages[0].url;
         heroImg.alt = allImages[0].desc || imgSearchName;
-        heroImg.onload = function(){heroImg.style.display='';heroSkel.style.display='none';};
-        heroImg.onerror = function(){heroSkel.style.display='none';};
       }
-      // Build carousel background
-      buildCarousel(allImages);
     } else {
       if (heroSkel) heroSkel.style.display = 'none';
+      clearTimeout(skelTimeout);
     }
   })();
 }
