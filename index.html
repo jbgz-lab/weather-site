@@ -449,55 +449,42 @@ let thunderTimer=null;
 function scheduleThunder(){if(thunderTimer)clearTimeout(thunderTimer);thunderTimer=setTimeout(()=>{const f=document.createElement('div');f.style.cssText='position:fixed;inset:0;z-index:5;background:rgba(255,255,255,0.06);pointer-events:none;transition:opacity 0.15s ease;opacity:1;';document.body.appendChild(f);setTimeout(()=>{f.style.opacity='0';},80);setTimeout(()=>{f.remove();},300);scheduleThunder();},Math.random()*8000+5000);}
 function stopThunder(){if(thunderTimer){clearTimeout(thunderTimer);thunderTimer=null;}}
 
-// ========== City Scenic Image Carousel ==========
-const enMap={'北京':'Beijing','上海':'Shanghai','天津':'Tianjin','重庆':'Chongqing','广州':'Guangzhou','深圳':'Shenzhen','杭州':'Hangzhou','南京':'Nanjing','成都':'Chengdu','武汉':'Wuhan','西安':"Xi'an",'长沙':'Changsha','苏州':'Suzhou','厦门':'Xiamen','青岛':'Qingdao','大连':'Dalian','哈尔滨':'Harbin','昆明':'Kunming','拉萨':'Lhasa','乌鲁木齐':'Urumqi','香港':'Hong Kong','澳门':'Macau','台北':'Taipei','桂林':'Guilin','丽江':'Lijiang','三亚':'Sanya','张家界':'Zhangjiajie','大理':'Dali','黄山':'Huangshan','敦煌':'Dunhuang','郑州':'Zhengzhou','合肥':'Hefei','南昌':'Nanchang','济南':'Jinan','太原':'Taiyuan','沈阳':'Shenyang','长春':'Changchun','福州':'Fuzhou','贵阳':'Guiyang','兰州':'Lanzhou','西宁':'Xining','银川':'Yinchuan','南宁':'Nanning','呼和浩特':'Hohhot','海口':'Haikou','石家庄':'Shijiazhuang','宁波':'Ningbo','无锡':'Wuxi','常州':'Changzhou','扬州':'Yangzhou','绍兴':'Shaoxing','洛阳':'Luoyang','开封':'Kaifeng','岳阳':'Yueyang','遵义':'Zunyi','珠海':'Zhuhai','东莞':'Dongguan','佛山':'Foshan','温州':'Wenzhou','徐州':'Xuzhou','烟台':'Yantai','威海':'Weihai','泉州':'Quanzhou','漳州':'Zhangzhou','宜昌':'Yichang','襄阳':'Xiangyang','凤凰':'Fenghuang','九寨沟':'Jiuzhaigou','稻城':'Daocheng','喀纳斯':'Kanas','西湖':'West Lake','长城':'Great Wall','故宫':'Forbidden City','兵马俑':'Terracotta Army','黄山':'Mount Huang','泰山':'Mount Tai','华山':'Mount Hua','峨眉山':'Mount Emei','庐山':'Mount Lu','黄果树':'Huangguoshu','鼓浪屿':'Gulangyu','平遥':'Pingyao','周庄':'Zhouzhuang','乌镇':'Wuzhen','莫高窟':'Mogao Caves','布达拉宫':'Potala Palace','雅鲁藏布':'Yarlung Tsangpo','珠峰':'Mount Everest','纳木错':'Namtso','青海湖':'Qinghai Lake','茶卡':'Chaka Salt Lake','张掖丹霞':'Zhangye Danxia','元阳':'Yuanyang','龙脊':'Longji','漓江':'Li River','黄龙':'Huanglong'};
-const scenicKeywordsZH=['景区','景点','旅游','名胜','风景','古城','古镇','古建筑','寺庙','园林','湖泊','山峰','瀑布','海滩','岛屿','峡谷','草原','沙漠','雪山','冰川'];
+// ========== City Gradient Generator (replaces Wikipedia images — works offline/no network) ==========
+// Each city gets a unique, beautiful gradient based on name hash
+function hashCity(name){let h=0;for(let i=0;i<name.length;i++)h=((h<<5)-h)+name.charCodeAt(i);return Math.abs(h);}
 
+function cityGradients(cityName){
+  const h=hashCity(cityName);
+  const gradients=[];
+  const palettes=[
+    {a:['#1a1a40','#2d1b69','#1a0a2e'],b:['#0f2027','#203a43','#2c5364'],c:['#1a2a6c','#b21f1f','#fdbb2d']}, // 暖紫蓝
+    {a:['#0a0a1a','#1a1040','#2a1a60'],b:['#1a0a20','#3a1050','#0a1a30'],c:['#0a1a10','#1a3a20','#0a2a1a']}, // 深紫
+    {a:['#141e30','#243b55','#0f1a2e'],b:['#0f0c29','#302b63','#24243e'],c:['#1e130c','#9a8478','#2a1a10']}, // 蓝灰
+    {a:['#2c3e50','#3498db','#1a2a38'],b:['#1a2a3a','#2c5a4a','#0a2a1a'],c:['#3a1a2a','#5a2a4a','#1a0a1a']}, // 蓝绿
+    {a:['#1a1a2e','#16213e','#0f3460'],b:['#2a1a3e','#4a2a5e','#1a0a2e'],c:['#1a2e1a','#3e5a2a','#0e1a0a']}, // 深蓝
+  ];
+  const p=palettes[h%palettes.length];
+
+  for(let i=0;i<5;i++){
+    const angle=((h+i*37)%360);
+    const p1=p[['a','b','c'][i%3]];
+    // Swap colors based on index
+    const cols=[...p1];
+    if(i%2===0)cols.reverse();
+    gradients.push({
+      url:'linear-gradient('+angle+'deg, '+cols[0]+' 0%, '+cols[1]+' 50%, '+cols[2]+' 100%)',
+      title:cityName+(i===0?'':' 视角'+(i+1)),
+      desc:cityName+' 城市风光',
+      isGradient:true
+    });
+  }
+  return gradients;
+}
+
+// ========== City Scenic Images (now pure CSS gradients, zero network) ==========
 async function fetchScenicImages(cityName){
-  const sn = enMap[cityName] || cityName;
-  const images = [];
-
-  // Method 1: Fetch city main Wikipedia page image (most reliable)
-  try{
-    const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(sn) + '?redirect=true');
-    if (r.ok) {
-      const d = await r.json();
-      if (d.thumbnail?.source) images.push({url:d.thumbnail.source, title:sn, desc:d.description||cityName});
-      if (d.originalimage?.source) images.push({url:d.originalimage.source, title:sn, desc:d.description||cityName});
-    }
-  }catch(e){console.warn('WP summary fail:',e);}
-
-  // Method 2: Search Wikipedia for landmark/tourism pages and get their images
-  try{
-    const allTitles = [];
-    const searchQueries = [sn+' landmarks', sn+' tourist attractions', sn+' cityscape'];
-    for(const q of searchQueries.slice(0,2)){
-      const url = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch='+encodeURIComponent(q)+'&srlimit=4&format=json&origin=*';
-      const sr = await fetch(url);
-      if(!sr.ok) continue;
-      const sd = await sr.json();
-      if(sd.query?.search) allTitles.push(...sd.query.search.map(p=>p.title));
-    }
-    const uniqueTitles = [...new Set([sn,...allTitles])].slice(0,6);
-    const piUrl = 'https://en.wikipedia.org/w/api.php?action=query&titles='+encodeURIComponent(uniqueTitles.join('|'))+'&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1400&format=json&origin=*';
-    const piRes = await fetch(piUrl);
-    if(piRes.ok){
-      const pd = await piRes.json();
-      for(const page of Object.values(pd.query?.pages||{})){
-        if(page.thumbnail?.source){
-          const hd = page.thumbnail.source.replace(/\/\d+px-/,'/1400px-');
-          // Avoid duplicate URLs from Method 1
-          if(!images.find(i=>i.url===hd)){
-            images.push({url:hd, title:page.title.replace(/_/g,' '), desc:page.description||page.title.replace(/_/g,' ')});
-          }
-        }
-      }
-    }
-  }catch(e){console.warn('WP search fail:',e);}
-
-  // Last resort: placeholder gradient — always ensures at least 1 slide
-  if(images.length===0) return [];
-  return images;
+  const gradients=cityGradients(cityName);
+  return gradients;
 }
 
 let carouselImages=[],carouselIndex=0,carouselTimer=null,carouselPaused=false;
@@ -514,9 +501,10 @@ function buildCarousel(images){
     container.innerHTML='';dotsEl.innerHTML='';labelEl.textContent='';return;
   }
 
-  // Build slide elements
+  // Build slide elements (support both image URLs and CSS gradients)
   container.innerHTML=images.map((img,i)=>{
-    return '<div class="bg-slide'+(i===0?' active':'')+'" style="background-image:url('+img.url+')" data-index="'+i+'"></div>';
+    const bgStyle = img.isGradient ? ('background:'+img.url) : ('background-image:url('+img.url+')');
+    return '<div class="bg-slide'+(i===0?' active':'')+'" style="'+bgStyle+';background-size:cover;background-position:center" data-index="'+i+'"></div>';
   }).join('');
 
   // Build dots
@@ -1071,7 +1059,6 @@ function render(data, entry) {
   document.getElementById('weatherContent').innerHTML =
     '<div class="city-hero" id="cityHero">' +
       '<div class="hero-skeleton" id="heroSkeleton"></div>' +
-      '<img id="heroImg" src="" alt="" style="display:none">' +
       '<div class="hero-label">' + displayName + '</div>' +
     '</div>' +
     '<div class="weather-main">' +
@@ -1101,40 +1088,17 @@ function render(data, entry) {
     '<div class="forecast-title">📅 未来五天</div>' +
     '<div class="forecast-strip">' + forecastHTML + '</div>';
 
-  // Fetch city image for hero + carousel background
+  // Generate city gradients for hero + carousel (instant, no network needed)
   const imgSearchName = isMuni ? entry.p : (entry.c || entry.n);
-  // Load side panels (attractions + food) — sync first, images async
   updateSidePanels(imgSearchName);
+  const allGradients = cityGradients(imgSearchName);
+  buildCarousel(allGradients);
 
-  const heroImg = document.getElementById('heroImg');
-  const heroSkel = document.getElementById('heroSkeleton');
-  // Hide skeleton after 8 seconds regardless
-  const skelTimeout = setTimeout(function(){if(heroSkel)heroSkel.style.display='none';},8000);
-
-  (async function loadCityImages(){
-    const allImages = await fetchScenicImages(imgSearchName);
-    if (allImages && allImages.length > 0) {
-      // Build carousel background first
-      buildCarousel(allImages);
-      // Set hero image
-      if (heroImg) {
-        heroImg.addEventListener('load', function(){
-          heroImg.style.display='';
-          if(heroSkel)heroSkel.style.display='none';
-          clearTimeout(skelTimeout);
-        }, {once:true});
-        heroImg.addEventListener('error', function(){
-          if(heroSkel)heroSkel.style.display='none';
-          clearTimeout(skelTimeout);
-        }, {once:true});
-        heroImg.src = allImages[0].url;
-        heroImg.alt = allImages[0].desc || imgSearchName;
-      }
-    } else {
-      if (heroSkel) heroSkel.style.display = 'none';
-      clearTimeout(skelTimeout);
-    }
-  })();
+  // Set hero background to first gradient (instant)
+  const heroEl = document.getElementById('cityHero');
+  if (heroEl) heroEl.style.background = allGradients[0].url;
+  const heroSkelEl = document.getElementById('heroSkeleton');
+  if (heroSkelEl) heroSkelEl.style.display = 'none';
 }
 
 function showLoading() {
